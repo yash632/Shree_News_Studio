@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: ai-news-studio
+    env: docker
+    plan: free
+    region: oregon
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
