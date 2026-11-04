@@ -517,6 +517,26 @@ from services.cleaner import start_cleanup_daemon
 start_cleanup_daemon(interval_seconds=180)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    print(f"Starting News Creation Studio with WebSockets on http://localhost:{port}")
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 7860))
+    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ('true', '1')
+
+    # If running in Hugging Face Spaces environment
+    if os.environ.get('SPACE_ID') or os.environ.get('GRADIO_SERVER_PORT'):
+        try:
+            from a2wsgi import WSGIMiddleware
+            import gradio as gr
+            import uvicorn
+
+            asgi_app = WSGIMiddleware(app)
+            with gr.Blocks(title="AI News Broadcast Studio") as demo:
+                gr.HTML('<iframe src="/" style="width:100%; height:98vh; border:none; display:block;"></iframe>')
+
+            combined_app = gr.mount_gradio_app(asgi_app, demo, path="/gradio")
+            print(f"Launching on Hugging Face Spaces port {port}")
+            uvicorn.run(combined_app, host="0.0.0.0", port=port)
+        except Exception as err:
+            print(f"Gradio mount fallback: {err}")
+            socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+    else:
+        print(f"Starting News Creation Studio with WebSockets on http://0.0.0.0:{port}")
+        socketio.run(app, host='0.0.0.0', port=port, debug=debug_mode, allow_unsafe_werkzeug=True)

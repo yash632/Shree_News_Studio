@@ -1,31 +1,36 @@
 FROM python:3.10-slim
 
-# Prevent Python from writing .pyc files and enable unbuffered output
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PORT=5000
+# Avoid interactive prompts during apt install
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PORT=7860
 
-# Install FFmpeg and essential fonts for text rendering
+# Install FFmpeg and system dependencies (including Hindi fonts)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    fonts-dejavu-core \
+    fonts-deva \
     fonts-noto-core \
-    fonts-freefont-ttf \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Create a non-root user (required by Hugging Face Spaces)
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+WORKDIR $HOME/app
 
-# Copy application files
-COPY . .
+# Copy requirements and install
+COPY --chown=user requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Ensure upload/output directories exist
-RUN mkdir -p uploads outputs fonts
+# Copy project files
+COPY --chown=user . .
 
-EXPOSE 5000
+# Ensure upload and output directories exist
+RUN mkdir -p uploads outputs
 
-# Run with Gunicorn (1 worker, 4 threads for ultra-low memory under 512MB RAM)
-CMD exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 180 app:app
+EXPOSE 7860
+
+CMD ["python", "app.py"]

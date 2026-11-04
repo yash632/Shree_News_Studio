@@ -1,3 +1,14 @@
+---
+title: AI News Broadcast Studio
+emoji: 📺
+colorFrom: red
+colorTo: indigo
+sdk: gradio
+sdk_version: 5.0.0
+app_file: app.py
+pinned: false
+---
+
 # 📺 AI News Studio - Automated News Video Generator
 
 Ek professional, broadcast-grade **AI News Video Generator Web Platform** jo Facebook, Instagram Reels, YouTube Shorts aur Landscape news videos ko automatically create karta hai.
