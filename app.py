@@ -164,14 +164,14 @@ def preview_voice():
 @app.route('/api/upload-media', methods=['POST'])
 @app.route('/backend_api/upload-media', methods=['POST'])
 def upload_media():
-    """Background pre-upload endpoint so video is already uploaded while user edits text."""
+    """Background pre-upload endpoint so video is already on server while user types text."""
     if 'video' not in request.files:
         return jsonify({"success": False, "error": "No media file provided."}), 400
     video_file = request.files['video']
     if not video_file or video_file.filename == '':
         return jsonify({"success": False, "error": "Empty file."}), 400
     if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
-        return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
+        return jsonify({"success": False, "error": "Invalid video format."}), 400
 
     ext = os.path.splitext(video_file.filename)[1].lower() or '.mp4'
     media_id = f"pre_{uuid.uuid4().hex[:12]}{ext}"

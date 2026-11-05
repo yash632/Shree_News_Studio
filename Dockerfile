@@ -5,11 +5,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PORT=7860
 
-# Install FFmpeg and system dependencies (including Hindi fonts)
+# Install FFmpeg, Chromium for HTML overlay rendering, and Hindi fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     fonts-deva \
     fonts-noto-core \
+    chromium \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

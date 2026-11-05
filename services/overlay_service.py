@@ -521,15 +521,24 @@ def create_news_overlay(
     font_file = DEFAULT_FONT if os.path.exists(DEFAULT_FONT) else None
 
     # 1. Top Bar Plate ("आज की बड़ी खबर" + categories + "श्री NEWS 24x7" logo)
-    if enable_top_bar and os.path.exists(PLATE_TOP_BAR):
-        top_img = Image.open(PLATE_TOP_BAR).convert("RGBA")
-        if is_vertical:
-            top_w = width
-            top_h = int(top_img.height * (width / top_img.width))
-            top_img = top_img.resize((top_w, top_h), Image.Resampling.LANCZOS)
-            canvas.paste(top_img, (0, 0), top_img)
+    if enable_top_bar:
+        if os.path.exists(PLATE_TOP_BAR):
+            top_img = Image.open(PLATE_TOP_BAR).convert("RGBA")
+            if is_vertical:
+                top_w = width
+                top_h = int(top_img.height * (width / top_img.width))
+                top_img = top_img.resize((top_w, top_h), Image.Resampling.LANCZOS)
+                canvas.paste(top_img, (0, 0), top_img)
+            else:
+                canvas.paste(top_img, (0, 0), top_img)
         else:
-            canvas.paste(top_img, (0, 0), top_img)
+            d_top = ImageDraw.Draw(canvas)
+            top_h = int(70 * (height / 1080.0))
+            d_top.rectangle([0, 0, width, top_h], fill=(255, 255, 255, 240))
+            tab_w = int(240 * (width / 1920.0))
+            d_top.rectangle([0, 0, tab_w, top_h], fill=(220, 38, 38, 255))
+            f_top = get_font(font_file, int(26 * (height / 1080.0)))
+            d_top.text((int(20 * (width / 1920.0)), int(18 * (height / 1080.0))), shape_devanagari("आज की बड़ी खबर"), font=f_top, fill=(255, 255, 255, 255))
 
     # Dynamic Custom Logo Overlay on Top Bar
     if enable_top_bar and logo_path and os.path.exists(logo_path):
@@ -623,6 +632,48 @@ def create_news_overlay(
             canvas.paste(lt_img, (0, height - lt_h), lt_img)
         else:
             canvas.paste(lt_img, (0, 750), lt_img)
+    else:
+        # Dynamic Standalone Lower Third Drawing
+        d_canvas = ImageDraw.Draw(canvas)
+        scale_f = width / 1920.0 if not is_vertical else width / 1080.0
+        lt_y = int(750 * (height / 1080.0)) if not is_vertical else int(height - 380 * scale_f)
+
+        # Breaking News Tag / Badge
+        badge_w = int(360 * scale_f)
+        badge_h = int(140 * scale_f)
+        d_canvas.rectangle([int(20 * scale_f), lt_y, int(20 * scale_f) + badge_w, lt_y + badge_h], fill=(185, 28, 28, 255))
+        d_canvas.rectangle([int(20 * scale_f), lt_y + int(badge_h * 0.65), int(20 * scale_f) + badge_w, lt_y + badge_h], fill=(245, 158, 11, 255))
+        f_badge = get_font(font_file, int(34 * scale_f))
+        f_badge_sub = get_font(font_file, int(20 * scale_f))
+        d_canvas.text((int(35 * scale_f), lt_y + int(16 * scale_f)), badge_text or "BREAKING NEWS", font=f_badge, fill=(255, 255, 255, 255))
+        d_canvas.text((int(45 * scale_f), lt_y + int(70 * scale_f)), "LIVE BROADCAST", font=f_badge_sub, fill=(15, 23, 42, 255))
+
+        # Main Headline Red Bar
+        hl_x = int(20 * scale_f) + badge_w + int(10 * scale_f)
+        hl_w = width - hl_x - int(20 * scale_f)
+        hl_h = int(75 * scale_f)
+        d_canvas.rectangle([hl_x, lt_y, hl_x + hl_w, lt_y + hl_h], fill=(220, 38, 38, 245))
+        f_hl = get_font(font_file, int(36 * scale_f))
+        clean_headline = shape_devanagari(headline_text.strip())
+        d_canvas.text((hl_x + int(20 * scale_f), lt_y + int(15 * scale_f)), clean_headline, font=f_hl, fill=(255, 255, 255, 255))
+
+        # Sub-Headline White Bar
+        sub_y = lt_y + hl_h
+        sub_h = int(55 * scale_f)
+        d_canvas.rectangle([hl_x, sub_y, hl_x + hl_w, sub_y + sub_h], fill=(255, 255, 255, 245))
+        if sub_headline and sub_headline.strip():
+            f_sub = get_font(font_file, int(24 * scale_f))
+            clean_sub = shape_devanagari(sub_headline.strip())
+            d_canvas.text((hl_x + int(20 * scale_f), sub_y + int(12 * scale_f)), clean_sub, font=f_sub, fill=(15, 23, 42, 255))
+
+        # Bottom Ticker Background Strip
+        ticker_bar_y = int(980 * (height / 1080.0)) if not is_vertical else height - int(90 * scale_f)
+        ticker_bar_h = int(75 * scale_f)
+        d_canvas.rectangle([0, ticker_bar_y, width, ticker_bar_y + ticker_bar_h], fill=(15, 23, 42, 250))
+        tag_w = int(240 * scale_f)
+        d_canvas.rectangle([0, ticker_bar_y, tag_w, ticker_bar_y + ticker_bar_h], fill=(220, 38, 38, 255))
+        f_tag = get_font(font_file, int(24 * scale_f))
+        d_canvas.text((int(25 * scale_f), ticker_bar_y + int(18 * scale_f)), shape_devanagari(ticker_tag or "ताज़ा ख़बर"), font=f_tag, fill=(255, 255, 255, 255))
 
     canvas.save(output_path, "PNG")
 
