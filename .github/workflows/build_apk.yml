@@ -20,21 +20,17 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Gradle Wrapper
+        run: |
+          cd mobile_app/android
+          gradle wrapper --gradle-version 8.3
+          chmod +x gradlew
+
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
-
-      - name: Scaffold native Android wrapper
-        run: |
-          cd mobile_app
-          cp android/app/build.gradle /tmp/app_build.gradle.bak || true
-          cp android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.xml.bak || true
-          flutter create --org com.shreenews --platforms=android .
-          cp /tmp/app_build.gradle.bak android/app/build.gradle
-          cp /tmp/AndroidManifest.xml.bak android/app/src/main/AndroidManifest.xml
-          chmod +x android/gradlew
 
       - name: Get Flutter Dependencies
         run: |
