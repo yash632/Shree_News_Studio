@@ -166,6 +166,9 @@ document.addEventListener('DOMContentLoaded', () => {
         audioModeInput.value = 'tts';
         ttsSection.style.display = 'block';
         uploadSection.style.display = 'none';
+        if (audioInput) audioInput.value = '';
+        if (audioDropContent) audioDropContent.style.display = 'block';
+        if (audioSelected) audioSelected.style.display = 'none';
     });
 
     tabModeUpload.addEventListener('click', () => {
@@ -819,6 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let preUploadedVideoId = null;
     let preUploadXhr = null;
     let preUploadPercent = 0;
+    let preUploadPromise = null;
 
     function startBackgroundPreUpload(file) {
         if (!file) return;
@@ -832,10 +836,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const fd = new FormData();
         fd.append('video', file);
 
-        const xhr = new XMLHttpRequest();
-        preUploadXhr = xhr;
-        xhr.open('POST', apiUrl('/api/upload-media'), true);
-
         let uploadBadge = document.getElementById('preUploadBadge');
         if (!uploadBadge) {
             uploadBadge = document.createElement('span');
@@ -847,35 +847,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         uploadBadge.textContent = '⚡ Cloud Pre-upload: 0%';
 
-        xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable && e.total > 0) {
-                preUploadPercent = Math.round((e.loaded / e.total) * 100);
-                const b = document.getElementById('preUploadBadge');
-                if (b) {
-                    b.textContent = `⚡ Cloud Pre-upload: ${preUploadPercent}%`;
-                }
-            }
-        };
+        preUploadPromise = new Promise((resolve) => {
+            const xhr = new XMLHttpRequest();
+            preUploadXhr = xhr;
+            xhr.open('POST', apiUrl('/api/upload-media'), true);
 
-        xhr.onload = () => {
-            if (xhr.status === 200) {
-                try {
-                    const data = JSON.parse(xhr.responseText);
-                    if (data.success && data.media_id) {
-                        preUploadedVideoId = data.media_id;
-                        const b = document.getElementById('preUploadBadge');
-                        if (b) {
-                            b.style.background = 'rgba(34, 197, 94, 0.18)';
-                            b.style.color = '#22c55e';
-                            b.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-                            b.textContent = '✓ 100% Cloud Ready (0s Upload)';
-                        }
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && e.total > 0) {
+                    preUploadPercent = Math.round((e.loaded / e.total) * 100);
+                    const b = document.getElementById('preUploadBadge');
+                    if (b) {
+                        b.textContent = `⚡ Cloud Pre-upload: ${preUploadPercent}%`;
                     }
-                } catch (e) {}
-            }
-        };
+                    const genProgress = document.getElementById('progressStatus');
+                    const genPercent = document.getElementById('progressPercent');
+                    const genFill = document.getElementById('progressFill');
+                    if (genProgress && genProgress.dataset.waitingOnPreupload === 'true') {
+                        const mbUp = (e.loaded / (1024 * 1024)).toFixed(1);
+                        const mbTot = (e.total / (1024 * 1024)).toFixed(1);
+                        const pVal = Math.round(preUploadPercent * 0.4);
+                        if (genPercent) genPercent.textContent = `${pVal}%`;
+                        if (genFill) genFill.style.width = `${pVal}%`;
+                        genProgress.textContent = `Uploading video footage: ${mbUp}MB / ${mbTot}MB (${preUploadPercent}%)...`;
+                    }
+                }
+            };
 
-        xhr.send(fd);
+            xhr.onload = () => {
+                preUploadXhr = null;
+                if (xhr.status === 200) {
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        if (data.success && data.media_id) {
+                            preUploadedVideoId = data.media_id;
+                            const b = document.getElementById('preUploadBadge');
+                            if (b) {
+                                b.style.background = 'rgba(34, 197, 94, 0.18)';
+                                b.style.color = '#22c55e';
+                                b.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                                b.textContent = '✓ 100% Cloud Ready (0s Upload)';
+                            }
+                            resolve(data.media_id);
+                            return;
+                        }
+                    } catch (e) {}
+                }
+                resolve(null);
+            };
+
+            xhr.onerror = () => {
+                preUploadXhr = null;
+                resolve(null);
+            };
+
+            xhr.send(fd);
+        });
     }
 
     // Handle user video selection
@@ -1513,19 +1539,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const formData = new FormData(form);
-
-        if (preUploadedVideoId) {
-            // Media was already uploaded in background! Skip re-uploading large video!
-            formData.delete('video');
-            formData.append('video_media_id', preUploadedVideoId);
-        }
-
         generateBtn.disabled = true;
         generateBtn.innerHTML = `<span class="btn-icon">⏳</span><span>SUBMITTING JOB...</span>`;
-        
         progressSection.style.display = 'block';
-        if (preUploadedVideoId) {
+        resultActions.style.display = 'none';
+
+        // Check if pre-upload is still running (e.g. at 65%):
+        let finalMediaId = preUploadedVideoId;
+        if (!finalMediaId && preUploadPromise) {
+            progressStatus.dataset.waitingOnPreupload = 'true';
+            progressStatus.textContent = `Finishing cloud upload (${preUploadPercent}%)...`;
+            const pVal = Math.round(preUploadPercent * 0.4);
+            progressPercent.textContent = `${pVal}%`;
+            progressFill.style.width = `${pVal}%`;
+            finalMediaId = await preUploadPromise;
+            delete progressStatus.dataset.waitingOnPreupload;
+        }
+
+        const formData = new FormData(form);
+
+        // Crucial: remove any heavy audio file if mode is TTS!
+        if (audioModeInput.value !== 'upload') {
+            formData.delete('audio');
+        }
+
+        // Remove empty logo file if default logo is used
+        if (!logoInput.files || logoInput.files.length === 0) {
+            formData.delete('logo');
+        }
+
+        if (finalMediaId) {
+            formData.delete('video');
+            formData.append('video_media_id', finalMediaId);
             progressPercent.textContent = '45%';
             progressFill.style.width = '45%';
             progressStatus.textContent = 'Footage ready on cloud (Instant 0s upload)! Initializing video render...';
@@ -1535,7 +1580,6 @@ document.addEventListener('DOMContentLoaded', () => {
             progressStatus.textContent = 'Uploading media assets to server...';
         }
         progressFill.style.backgroundColor = 'var(--accent-red)';
-        resultActions.style.display = 'none';
 
         // Hide final player, show canvas preview
         finalVideoPlayer.style.display = 'none';

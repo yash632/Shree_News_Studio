@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 import time
 import datetime
@@ -95,6 +96,10 @@ def is_allowed_file(filename: str, extensions: set) -> bool:
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory('static', 'favicon.png', mimetype='image/png')
+
+@app.route('/logo.png')
+def root_logo():
+    return send_from_directory('static', 'logo.png', mimetype='image/png')
 
 @app.route('/portrait-template')
 def portrait_template():
