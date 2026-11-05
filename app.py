@@ -160,26 +160,53 @@ def preview_voice():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/upload-media', methods=['POST'])
+@app.route('/api/upload-media', methods=['POST'])
+@app.route('/backend_api/upload-media', methods=['POST'])
+def upload_media():
+    """Background pre-upload endpoint so video is already uploaded while user edits text."""
+    if 'video' not in request.files:
+        return jsonify({"success": False, "error": "No media file provided."}), 400
+    video_file = request.files['video']
+    if not video_file or video_file.filename == '':
+        return jsonify({"success": False, "error": "Empty file."}), 400
+    if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
+        return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
+
+    ext = os.path.splitext(video_file.filename)[1].lower() or '.mp4'
+    media_id = f"pre_{uuid.uuid4().hex[:12]}{ext}"
+    media_path = os.path.join(UPLOAD_FOLDER, media_id)
+    video_file.save(media_path)
+    return jsonify({
+        "success": True,
+        "media_id": media_id,
+        "filename": video_file.filename,
+        "size": os.path.getsize(media_path)
+    })
+
 @app.route('/generate', methods=['POST'])
 @app.route('/api/generate', methods=['POST'])
 @app.route('/backend_api/generate', methods=['POST'])
 def generate_video():
     """Handles video generation job submission."""
-    # 1. Video file validation
-    if 'video' not in request.files:
-        return jsonify({"success": False, "error": "Background video footage is required."}), 400
-    
-    video_file = request.files['video']
-    if not video_file or video_file.filename == '':
-        return jsonify({"success": False, "error": "No video footage selected."}), 400
-    
-    if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
-        return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
-
+    # 1. Video file validation (pre-uploaded or direct upload)
+    video_media_id = request.form.get('video_media_id', '').strip()
     job_id = job_manager.create_job()
-    video_ext = os.path.splitext(video_file.filename)[1].lower()
-    video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
-    video_file.save(video_path)
+
+    if video_media_id and os.path.exists(os.path.join(UPLOAD_FOLDER, secure_filename(video_media_id))):
+        existing_path = os.path.join(UPLOAD_FOLDER, secure_filename(video_media_id))
+        video_ext = os.path.splitext(existing_path)[1].lower()
+        video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
+        shutil.copy2(existing_path, video_path)
+    elif 'video' in request.files and request.files['video'].filename != '':
+        video_file = request.files['video']
+        if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
+            return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
+        video_ext = os.path.splitext(video_file.filename)[1].lower()
+        video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
+        video_file.save(video_path)
+    else:
+        return jsonify({"success": False, "error": "Background video footage is required."}), 400
 
     # 2. Audio selection (TTS vs Direct Upload)
     audio_mode = request.form.get('audio_mode', 'tts')

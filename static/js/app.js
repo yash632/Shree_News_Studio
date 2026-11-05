@@ -813,11 +813,77 @@ document.addEventListener('DOMContentLoaded', () => {
         portraitReferencePreview.addEventListener('load', syncPortraitPreview);
     }
 
+    // ============================================================
+    // Background Pre-Upload Engine (Instant 0-Second Upload Jugaad)
+    // ============================================================
+    let preUploadedVideoId = null;
+    let preUploadXhr = null;
+    let preUploadPercent = 0;
+
+    function startBackgroundPreUpload(file) {
+        if (!file) return;
+        if (preUploadXhr) {
+            preUploadXhr.abort();
+            preUploadXhr = null;
+        }
+        preUploadedVideoId = null;
+        preUploadPercent = 0;
+
+        const fd = new FormData();
+        fd.append('video', file);
+
+        const xhr = new XMLHttpRequest();
+        preUploadXhr = xhr;
+        xhr.open('POST', apiUrl('/api/upload-media'), true);
+
+        let uploadBadge = document.getElementById('preUploadBadge');
+        if (!uploadBadge) {
+            uploadBadge = document.createElement('span');
+            uploadBadge.id = 'preUploadBadge';
+            uploadBadge.style.cssText = 'margin-left: 8px; font-size: 11px; padding: 3px 9px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.3);';
+            if (videoFileName && videoFileName.parentNode) {
+                videoFileName.parentNode.appendChild(uploadBadge);
+            }
+        }
+        uploadBadge.textContent = '⚡ Cloud Pre-upload: 0%';
+
+        xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable && e.total > 0) {
+                preUploadPercent = Math.round((e.loaded / e.total) * 100);
+                const b = document.getElementById('preUploadBadge');
+                if (b) {
+                    b.textContent = `⚡ Cloud Pre-upload: ${preUploadPercent}%`;
+                }
+            }
+        };
+
+        xhr.onload = () => {
+            if (xhr.status === 200) {
+                try {
+                    const data = JSON.parse(xhr.responseText);
+                    if (data.success && data.media_id) {
+                        preUploadedVideoId = data.media_id;
+                        const b = document.getElementById('preUploadBadge');
+                        if (b) {
+                            b.style.background = 'rgba(34, 197, 94, 0.18)';
+                            b.style.color = '#22c55e';
+                            b.style.borderColor = 'rgba(34, 197, 94, 0.4)';
+                            b.textContent = '✓ 100% Cloud Ready (0s Upload)';
+                        }
+                    }
+                } catch (e) {}
+            }
+        };
+
+        xhr.send(fd);
+    }
+
     // Handle user video selection
     videoInput.addEventListener('change', () => {
         stopTimelinePreview();
         if (videoInput.files.length > 0) {
             const file = videoInput.files[0];
+            startBackgroundPreUpload(file);
             const videoUrl = URL.createObjectURL(file);
             portraitVideoUrl = videoUrl;
             if (previewFootageVideo) {
@@ -851,6 +917,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearVideoBtn.addEventListener('click', () => {
         stopTimelinePreview();
+        preUploadedVideoId = null;
+        if (preUploadXhr) {
+            preUploadXhr.abort();
+            preUploadXhr = null;
+        }
+        const b = document.getElementById('preUploadBadge');
+        if (b) b.remove();
         if (groundDurationRange) {
             groundDurationRange.max = 300;
             if (groundDurationHint) {
@@ -1442,13 +1515,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const formData = new FormData(form);
 
+        if (preUploadedVideoId) {
+            // Media was already uploaded in background! Skip re-uploading large video!
+            formData.delete('video');
+            formData.append('video_media_id', preUploadedVideoId);
+        }
+
         generateBtn.disabled = true;
         generateBtn.innerHTML = `<span class="btn-icon">⏳</span><span>SUBMITTING JOB...</span>`;
         
         progressSection.style.display = 'block';
-        progressPercent.textContent = '1%';
-        progressFill.style.width = '1%';
-        progressStatus.textContent = 'Uploading media assets to server...';
+        if (preUploadedVideoId) {
+            progressPercent.textContent = '45%';
+            progressFill.style.width = '45%';
+            progressStatus.textContent = 'Footage ready on cloud (Instant 0s upload)! Initializing video render...';
+        } else {
+            progressPercent.textContent = '1%';
+            progressFill.style.width = '1%';
+            progressStatus.textContent = 'Uploading media assets to server...';
+        }
         progressFill.style.backgroundColor = 'var(--accent-red)';
         resultActions.style.display = 'none';
 
