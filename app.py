@@ -20,6 +20,17 @@ from config import (
 from services.job_manager import job_manager
 from services.tts_service import generate_tts_audio
 
+# ZeroGPU compatibility for Hugging Face Spaces
+try:
+    import spaces
+    @spaces.GPU
+    def zero_gpu_anchor():
+        """Satisfies Hugging Face ZeroGPU startup requirement."""
+        return True
+except Exception:
+    def zero_gpu_anchor():
+        return True
+
 app = Flask(__name__)
 CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
@@ -89,6 +100,9 @@ def strip_thumbnails(img_name):
     return send_from_directory('static/assets', f'{img_name}.jpg')
 
 @app.route('/')
+@app.route('/studio')
+@app.route('/flask')
+@app.route('/flask/')
 def index():
     return render_template(
         'index.html',
@@ -97,14 +111,17 @@ def index():
         default_logo='/static/favicon.png' if DEFAULT_LOGO else None
     )
 
+@app.route('/voices', methods=['GET'])
 @app.route('/api/voices', methods=['GET'])
 def get_voices():
     return jsonify({"success": True, "voices": NEWS_VOICES})
 
+@app.route('/themes', methods=['GET'])
 @app.route('/api/themes', methods=['GET'])
 def get_themes():
     return jsonify({"success": True, "themes": NEWS_THEMES})
 
+@app.route('/preview-voice', methods=['POST'])
 @app.route('/api/preview-voice', methods=['POST'])
 def preview_voice():
     """Generates a fast, low-latency audio preview of the selected voice."""
@@ -135,6 +152,7 @@ def preview_voice():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/generate', methods=['POST'])
 @app.route('/api/generate', methods=['POST'])
 def generate_video():
     """Handles video generation job submission."""
@@ -304,6 +322,7 @@ def generate_video():
         "message": "Video rendering started."
     })
 
+@app.route('/status/<job_id>', methods=['GET'])
 @app.route('/api/status/<job_id>', methods=['GET'])
 def job_status(job_id):
     """Returns the live status of the generation job."""
@@ -523,19 +542,59 @@ if __name__ == '__main__':
     # If running in Hugging Face Spaces environment
     if os.environ.get('SPACE_ID') or os.environ.get('GRADIO_SERVER_PORT'):
         try:
-            from a2wsgi import WSGIMiddleware
             import gradio as gr
-            import uvicorn
+            from a2wsgi import WSGIMiddleware
 
-            asgi_app = WSGIMiddleware(app)
-            with gr.Blocks(title="AI News Broadcast Studio") as demo:
-                gr.HTML('<iframe src="/" style="width:100%; height:98vh; border:none; display:block;"></iframe>')
+            # ZeroGPU Registered Handler
+            try:
+                import spaces
+                @spaces.GPU
+                def gpu_runner(val=""):
+                    return f"Active {val}"
+            except Exception:
+                def gpu_runner(val=""):
+                    return f"Active {val}"
 
-            combined_app = gr.mount_gradio_app(asgi_app, demo, path="/gradio")
-            print(f"Launching on Hugging Face Spaces port {port}")
-            uvicorn.run(combined_app, host="0.0.0.0", port=port)
+            from starlette.staticfiles import StaticFiles
+
+            with gr.Blocks(title="Shree News Studio") as demo:
+                gr.HTML('<iframe src="/studio" style="width:100vw; height:100vh; border:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999; background:#070a13;"></iframe>')
+                _in = gr.Textbox(value="1", visible=False)
+                _out = gr.Textbox(visible=False)
+                _b = gr.Button("Init", visible=False)
+                _b.click(fn=gpu_runner, inputs=_in, outputs=_out)
+
+            # Serve static assets directly so CSS, JS, fonts and images never 404
+            demo.app.mount("/static", StaticFiles(directory="static"), name="static")
+            if os.path.exists("frontend"):
+                demo.app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
+            if os.path.exists("outputs"):
+                demo.app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+
+            from starlette.routing import Route
+            from starlette.responses import RedirectResponse
+
+            # Mount Flask for UI and API endpoints
+            flask_asgi = WSGIMiddleware(app)
+            demo.app.mount("/studio", flask_asgi)
+            demo.app.mount("/api", flask_asgi)
+            demo.app.mount("/flask", flask_asgi)
+
+            # Auto-redirect root to /studio so no iframe is needed!
+            async def auto_redirect(request):
+                return RedirectResponse(url="/studio")
+
+            demo.app.routes.insert(0, Route("/", auto_redirect))
+
+            print("Launching native Gradio on Hugging Face Spaces...")
+            demo.launch(
+                server_name="0.0.0.0",
+                server_port=7860,
+                show_error=True,
+                css="body, gradio-app, .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: hidden !important; background: #070a13 !important; } footer { display: none !important; }"
+            )
         except Exception as err:
-            print(f"Gradio mount fallback: {err}")
+            print(f"Server fallback: {err}")
             socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
     else:
         print(f"Starting News Creation Studio with WebSockets on http://0.0.0.0:{port}")

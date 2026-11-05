@@ -7,6 +7,7 @@ edge-tts>=6.1.0
 Pillow>=10.0.0
 gunicorn>=21.0.0
 werkzeug>=3.0.0
+fastapi>=0.110.0
 gradio>=5.0.0
 uvicorn>=0.30.0
 a2wsgi>=1.10.0
