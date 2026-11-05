@@ -517,7 +517,7 @@ def render_news_video(
         "-map", "[aout]",
         "-c:v", "libx264",
         "-preset", "ultrafast",
-        "-threads", "0",
+        "-threads", "2",
         "-crf", "24",
         "-c:a", "aac",
         "-b:a", "192k",
