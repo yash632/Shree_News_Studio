@@ -20,19 +20,55 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Gradle Wrapper
-        run: |
-          cd mobile_app/android
-          gradle wrapper --gradle-version 8.3
-          chmod +x gradlew
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
           cache: true
 
-      - name: Get Flutter Dependencies
+      - name: Configure Android Project & Permissions
+        run: |
+          cd mobile_app
+          # Ensure clean android scaffolding with official gradle wrapper
+          rm -rf android
+          flutter create --org com.shreenews --project-name shree_news_studio --platforms android .
+
+          # Configure minSdkVersion to 24 for FFmpeg
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' android/app/build.gradle || true
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' android/app/build.gradle || true
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' android/app/build.gradle.kts || true
+
+          # Inject subprojects namespace fix for ffmpeg_kit in build.gradle
+          cat << 'EOF' >> android/build.gradle
+          subprojects {
+              afterEvaluate { project ->
+                  if (project.hasProperty('android')) {
+                      if (project.android.namespace == null) {
+                          project.android.namespace = project.group ?: "com.shreenews.studio"
+                      }
+                  }
+              }
+          }
+          EOF
+
+          # Inject packagingOptions into android/app/build.gradle
+          cat << 'EOF' >> android/app/build.gradle
+          android {
+              packagingOptions {
+                  pickFirst 'lib/x86/libc++_shared.so'
+                  pickFirst 'lib/x86_64/libc++_shared.so'
+                  pickFirst 'lib/armeabi-v7a/libc++_shared.so'
+                  pickFirst 'lib/arm64-v8a/libc++_shared.so'
+              }
+          }
+          EOF
+
+          # Add storage and media permissions into AndroidManifest.xml
+          sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"\/>' android/app/src/main/AndroidManifest.xml
+
+          chmod +x android/gradlew
+
+      - name: Get Dependencies
         run: |
           cd mobile_app
           flutter pub get
@@ -40,7 +76,7 @@ jobs:
       - name: Build Android Release APK
         run: |
           cd mobile_app
-          flutter build apk --release -v
+          flutter build apk --release
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
