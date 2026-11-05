@@ -26,8 +26,15 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Check Flutter Doctor
-        run: flutter doctor -v
+      - name: Scaffold native Android wrapper
+        run: |
+          cd mobile_app
+          cp android/app/build.gradle /tmp/app_build.gradle.bak || true
+          cp android/app/src/main/AndroidManifest.xml /tmp/AndroidManifest.xml.bak || true
+          flutter create --org com.shreenews --platforms=android .
+          cp /tmp/app_build.gradle.bak android/app/build.gradle
+          cp /tmp/AndroidManifest.xml.bak android/app/src/main/AndroidManifest.xml
+          chmod +x android/gradlew
 
       - name: Get Flutter Dependencies
         run: |
@@ -37,7 +44,7 @@ jobs:
       - name: Build Android Release APK
         run: |
           cd mobile_app
-          flutter build apk --release
+          flutter build apk --release -v
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4

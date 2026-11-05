@@ -53,3 +53,4 @@ class NewsConfig {
     this.restartFootage = false,
   });
 }
+

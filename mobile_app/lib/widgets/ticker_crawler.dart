@@ -97,3 +97,4 @@ class _TickerCrawlerState extends State<TickerCrawler> with SingleTickerProvider
     );
   }
 }
+

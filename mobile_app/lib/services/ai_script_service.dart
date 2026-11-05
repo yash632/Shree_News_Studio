@@ -5,7 +5,7 @@ class AiScriptService {
   static const String _backendUrl = 'https://shree-news-studio.onrender.com';
 
   /// Generates a fast Hindi news script using LangChain / Groq API in ~1 second
-  static Future<String?> generateScript(String topic) async {
+  static Future<String?> generateScript({required String topic}) async {
     try {
       final response = await http.post(
         Uri.parse('$_backendUrl/api/generate-script-stream'),
@@ -26,3 +26,4 @@ class AiScriptService {
     return null;
   }
 }
+
