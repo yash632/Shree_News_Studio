@@ -1,3 +1,44 @@
+// ============================================================
+// Multi-Server Backend Configuration (Render UI <-> Hugging Face Backend)
+// ============================================================
+function getBackendUrl() {
+    if (window.BACKEND_URL && window.BACKEND_URL.trim()) {
+        return window.BACKEND_URL.trim().replace(/\/+$/, '');
+    }
+    const saved = localStorage.getItem('shree_backend_url');
+    if (saved && saved.trim()) {
+        return saved.trim().replace(/\/+$/, '');
+    }
+    // If running on Render or foreign host, default to Hugging Face backend
+    if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('vercel.app')) {
+        return 'https://yash632-shree-news-studio.hf.space';
+    }
+    return ''; // Same origin
+}
+
+function setBackendUrl(url) {
+    if (!url || !url.trim()) {
+        localStorage.removeItem('shree_backend_url');
+    } else {
+        localStorage.setItem('shree_backend_url', url.trim().replace(/\/+$/, ''));
+    }
+    window.location.reload();
+}
+
+function apiUrl(path) {
+    if (!path) return '';
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const base = getBackendUrl();
+    let cleanPath = path.startsWith('/') ? path : '/' + path;
+
+    // When communicating with Hugging Face Space backend, route to /backend_api to bypass Gradio's reserved /api route
+    if (base && base.includes('hf.space')) {
+        cleanPath = cleanPath.replace(/^\/api\//, '/backend_api/');
+    }
+
+    return base ? (base + cleanPath) : cleanPath;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Form & Button
     const form = document.getElementById('newsForm');
@@ -21,6 +62,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoInput = document.getElementById('logoInput');
     const logoUploadBox = document.getElementById('logoUploadBox');
     const logoPreviewImg = document.getElementById('logoPreviewImg');
+
+    // Backend Server Switcher Pill
+    const backendServerPill = document.getElementById('backendServerPill');
+    const backendStatusText = document.getElementById('backendStatusText');
+    const currentBackend = getBackendUrl();
+    if (backendStatusText) {
+        if (currentBackend) {
+            backendStatusText.textContent = `Backend: ${currentBackend.replace(/^https?:\/\//, '')}`;
+        } else {
+            backendStatusText.textContent = `Backend: Same-Domain`;
+        }
+    }
+    if (backendServerPill) {
+        backendServerPill.addEventListener('click', () => {
+            const current = getBackendUrl() || 'https://yash632-shree-news-studio.hf.space';
+            const entered = prompt(
+                "Backend Processing Server URL:\n\n• For Hugging Face: https://yash632-shree-news-studio.hf.space\n• For Render or Local: Leave empty for same domain\n",
+                current
+            );
+            if (entered !== null) {
+                setBackendUrl(entered.trim());
+            }
+        });
+    }
 
     // Audio Controls
     const tabModeTts = document.getElementById('tabModeTts');
@@ -372,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const introText = rawScriptText;
                 const sampleText = introText.length > 300 ? introText.slice(0, 300) : introText;
-                const resp = await fetch('/api/preview-voice', {
+                const resp = await fetch(apiUrl('/api/preview-voice'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voice_id: voiceId, text: sampleText, speed: ttsSpeed })
@@ -383,20 +448,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     updatePreviewBtnState(false);
                     return;
                 }
-                introAudioUrl = resData.audio_url;
+                introAudioUrl = apiUrl(resData.audio_url);
             }
 
             if (mode === 'intro_then_ground_outro') {
                 const outroText = (outroTextInput?.value || '').trim() || "विशेष बुलेटिन में फिलहाल इतना ही, देश-दुनिया की बाकी खबरों के लिए देखते रहिए श्री NEWS 24x7...";
                 const sampleOutro = outroText.length > 300 ? outroText.slice(0, 300) : outroText;
-                const resp2 = await fetch('/api/preview-voice', {
+                const resp2 = await fetch(apiUrl('/api/preview-voice'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voice_id: voiceId, text: sampleOutro, speed: ttsSpeed })
                 });
                 const resData2 = await resp2.json();
                 if (resData2.success && resData2.audio_url) {
-                    outroAudioUrl = resData2.audio_url;
+                    outroAudioUrl = apiUrl(resData2.audio_url);
                 }
             }
 
@@ -1322,7 +1387,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previewVoiceBtn.innerHTML = `<span>Loading...</span>`;
 
         try {
-            const resp = await fetch('/api/preview-voice', {
+            const resp = await fetch(apiUrl('/api/preview-voice'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1333,7 +1398,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await resp.json();
             if (data.success && data.audio_url) {
-                voicePreviewAudio.src = data.audio_url + '?t=' + Date.now();
+                voicePreviewAudio.src = apiUrl(data.audio_url) + '?t=' + Date.now();
                 voicePreviewAudio.load();
                 voicePreviewAudio.play();
                 showToast(`Playing voice preview at ${currentSpeed.toFixed(2)}x speed...`);
@@ -1399,7 +1464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('canvas').style.display = 'block';
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', '/api/generate', true);
+        xhr.open('POST', apiUrl('/api/generate'), true);
 
         // Upload progress listener
         xhr.upload.onprogress = (event) => {
@@ -1428,10 +1493,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     progressStatus.textContent = 'Media uploaded! Initializing video render...';
                     watchJobProgress(data.job_id);
                 } else {
-                    throw new Error(data.error || `Server error (${xhr.status})`);
+                    let errDetail = data.error;
+                    if (errDetail && typeof errDetail === 'object') {
+                        errDetail = errDetail.message || errDetail.error || JSON.stringify(errDetail);
+                    }
+                    throw new Error(errDetail || `Server error (${xhr.status})`);
                 }
             } catch (err) {
-                const friendlyMsg = err.message || "Failed to submit video generation job. Please try again.";
+                let friendlyMsg = err.message || "Failed to submit video generation job. Please try again.";
+                if (friendlyMsg && typeof friendlyMsg === 'object') {
+                    friendlyMsg = friendlyMsg.message || friendlyMsg.error || JSON.stringify(friendlyMsg);
+                }
                 showToast(friendlyMsg, true);
                 resetGenerateBtn();
                 progressStatus.innerHTML = `<span style="color: #ff6b6b; font-weight: 600;">⚠️ ${friendlyMsg}</span>`;
@@ -1458,14 +1530,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let socket = null;
     try {
         if (typeof io !== 'undefined') {
-            socket = io({
+            const socketHost = getBackendUrl() || window.location.origin;
+            socket = io(socketHost, {
                 transports: ['websocket', 'polling'],
                 reconnection: true,
                 reconnectionAttempts: 15,
                 reconnectionDelay: 1000
             });
             socket.on('connect', () => {
-                console.log('[SocketIO] Connected to broadcast server, session id:', socket.id);
+                console.log('[SocketIO] Connected to broadcast server:', socketHost, 'session id:', socket.id);
             });
             socket.on('disconnect', (reason) => {
                 console.log('[SocketIO] Disconnected from server:', reason);
@@ -1502,7 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast("News Video Generated Successfully!");
 
                 const videoFileName = (job.output_video && job.output_video !== 'null' && job.output_video !== 'None') ? job.output_video : `news_${jobId}.mp4`;
-                const videoUrl = `/outputs/${videoFileName}`;
+                const videoUrl = apiUrl(`/outputs/${videoFileName}`);
                 const previewCanvasBg = document.getElementById('previewCanvasBg');
                 if (previewCanvasBg) previewCanvasBg.style.display = 'none';
                 finalVideoPlayer.src = videoUrl;
@@ -1519,7 +1592,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 isCompleted = true;
                 cleanup();
 
-                const errorMsg = job.error || job.message || 'Video processing encountered an unexpected issue. Please check your footage and try again.';
+                let errorMsg = job.error || job.message || 'Video processing encountered an unexpected issue. Please check your footage and try again.';
+                if (errorMsg && typeof errorMsg === 'object') {
+                    errorMsg = errorMsg.message || errorMsg.error || JSON.stringify(errorMsg);
+                }
                 showToast(errorMsg, true);
                 progressStatus.innerHTML = `<span style="color: #ff6b6b; font-weight: 600;">⚠️ ${errorMsg}</span>`;
                 progressFill.style.backgroundColor = 'var(--accent-red)';
@@ -1554,25 +1630,24 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('join_job', { job_id: jobId });
         }
 
-        // 2. Safety Fallback: only polls if socket hasn't delivered updates within 3.5s
-        // (Ensures zero bugs even if client network/firewall drops WebSockets)
+        // 2. High-Reliability Progress Poller (works seamlessly across multi-server and WSGI mounts)
         fallbackInterval = setInterval(async () => {
             if (isCompleted) {
                 clearInterval(fallbackInterval);
                 return;
             }
-            if (Date.now() - lastUpdateTime > 5000) {
+            if (!socket || !socket.connected || (Date.now() - lastUpdateTime > 1500)) {
                 try {
-                    const resp = await fetch(`/api/status/${jobId}`);
+                    const resp = await fetch(apiUrl(`/api/status/${jobId}`));
                     const data = await resp.json();
                     if (data && data.success && data.job) {
                         handleProgress(data.job);
                     }
                 } catch (e) {
-                    console.warn('[Progress Watcher] Fallback ping error:', e);
+                    console.warn('[Progress Watcher] Status check:', e);
                 }
             }
-        }, 2000);
+        }, 1500);
     }
 
     function resetGenerateBtn() {
@@ -1614,7 +1689,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scriptCharCount) scriptCharCount.textContent = '0 characters';
 
             try {
-                const response = await fetch('/api/generate-script-stream', {
+                const response = await fetch(apiUrl('/api/generate-script-stream'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic, provider, model })

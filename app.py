@@ -20,20 +20,25 @@ from config import (
 from services.job_manager import job_manager
 from services.tts_service import generate_tts_audio
 
-# ZeroGPU compatibility for Hugging Face Spaces
-try:
-    import spaces
-    @spaces.GPU
-    def zero_gpu_anchor():
-        """Satisfies Hugging Face ZeroGPU startup requirement."""
-        return True
-except Exception:
-    def zero_gpu_anchor():
-        return True
-
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Range'
+    response.headers['Access-Control-Expose-Headers'] = 'Content-Range, Accept-Ranges, Content-Length'
+    return response
+
+@app.route('/api/<path:subpath>', methods=['OPTIONS'])
+def handle_options_preflight(subpath):
+    response = jsonify({'status': 'ok'})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Range'
+    return response
 
 def emit_job_progress(job_id: str, job_data: dict):
     """
@@ -113,16 +118,19 @@ def index():
 
 @app.route('/voices', methods=['GET'])
 @app.route('/api/voices', methods=['GET'])
+@app.route('/backend_api/voices', methods=['GET'])
 def get_voices():
     return jsonify({"success": True, "voices": NEWS_VOICES})
 
 @app.route('/themes', methods=['GET'])
 @app.route('/api/themes', methods=['GET'])
+@app.route('/backend_api/themes', methods=['GET'])
 def get_themes():
     return jsonify({"success": True, "themes": NEWS_THEMES})
 
 @app.route('/preview-voice', methods=['POST'])
 @app.route('/api/preview-voice', methods=['POST'])
+@app.route('/backend_api/preview-voice', methods=['POST'])
 def preview_voice():
     """Generates a fast, low-latency audio preview of the selected voice."""
     data = request.get_json(silent=True) or {}
@@ -154,6 +162,7 @@ def preview_voice():
 
 @app.route('/generate', methods=['POST'])
 @app.route('/api/generate', methods=['POST'])
+@app.route('/backend_api/generate', methods=['POST'])
 def generate_video():
     """Handles video generation job submission."""
     # 1. Video file validation
@@ -324,6 +333,7 @@ def generate_video():
 
 @app.route('/status/<job_id>', methods=['GET'])
 @app.route('/api/status/<job_id>', methods=['GET'])
+@app.route('/backend_api/status/<job_id>', methods=['GET'])
 def job_status(job_id):
     """Returns the live status of the generation job."""
     status = job_manager.get_job_status(job_id)
@@ -336,7 +346,9 @@ def serve_output(filename):
     """Serves rendered video or audio files."""
     return send_from_directory(OUTPUT_FOLDER, filename)
 
+@app.route('/generate-script-stream', methods=['POST'])
 @app.route('/api/generate-script-stream', methods=['POST'])
+@app.route('/backend_api/generate-script-stream', methods=['POST'])
 def generate_script_stream():
     """Generates an authentic Hindi news anchor script using LangChain with streaming enabled."""
     data = request.get_json() or {}
@@ -539,63 +551,56 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 7860))
     debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ('true', '1')
 
-    # If running in Hugging Face Spaces environment
+    # If running in Hugging Face Spaces (ZeroGPU environment)
     if os.environ.get('SPACE_ID') or os.environ.get('GRADIO_SERVER_PORT'):
+        import gradio as gr
+        from a2wsgi import WSGIMiddleware
+        from starlette.staticfiles import StaticFiles
+        from fastapi.middleware.cors import CORSMiddleware
+
+        # 1. ZeroGPU Anchor Function (Required by Hugging Face ZeroGPU startup scanner)
         try:
-            import gradio as gr
-            from a2wsgi import WSGIMiddleware
+            import spaces
+            @spaces.GPU
+            def zero_gpu_anchor(val=""):
+                return f"ZeroGPU Active {val}"
+        except Exception:
+            def zero_gpu_anchor(val=""):
+                return f"Active {val}"
 
-            # ZeroGPU Registered Handler
-            try:
-                import spaces
-                @spaces.GPU
-                def gpu_runner(val=""):
-                    return f"Active {val}"
-            except Exception:
-                def gpu_runner(val=""):
-                    return f"Active {val}"
+        with gr.Blocks(title="Shree News Studio Backend") as demo:
+            gr.Markdown("## 📺 Shree News Studio Backend Engine")
+            gr.Markdown("Status: **Active** | Runtime: **Hugging Face ZeroGPU**")
+            _in = gr.Textbox(value="1", visible=False)
+            _out = gr.Textbox(visible=False)
+            _b = gr.Button("Init", visible=False)
+            _b.click(fn=zero_gpu_anchor, inputs=_in, outputs=_out)
 
-            from starlette.staticfiles import StaticFiles
+        # 2. Add FastAPI CORS middleware for cross-origin access from Render frontend
+        demo.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+            expose_headers=["*"]
+        )
 
-            with gr.Blocks(title="Shree News Studio") as demo:
-                gr.HTML('<iframe src="/studio" style="width:100vw; height:100vh; border:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999; background:#070a13;"></iframe>')
-                _in = gr.Textbox(value="1", visible=False)
-                _out = gr.Textbox(visible=False)
-                _b = gr.Button("Init", visible=False)
-                _b.click(fn=gpu_runner, inputs=_in, outputs=_out)
+        # 3. Mount Flask on /backend_api (bypasses Gradio's internal /api collision completely)
+        flask_asgi = WSGIMiddleware(app)
+        demo.app.mount("/backend_api", flask_asgi)
 
-            # Serve static assets directly so CSS, JS, fonts and images never 404
-            demo.app.mount("/static", StaticFiles(directory="static"), name="static")
-            if os.path.exists("frontend"):
-                demo.app.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
-            if os.path.exists("outputs"):
-                demo.app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+        # 4. Mount outputs so rendered videos stream directly to Render frontend
+        if not os.path.exists("outputs"):
+            os.makedirs("outputs", exist_ok=True)
+        demo.app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
 
-            from starlette.routing import Route
-            from starlette.responses import RedirectResponse
-
-            # Mount Flask for UI and API endpoints
-            flask_asgi = WSGIMiddleware(app)
-            demo.app.mount("/studio", flask_asgi)
-            demo.app.mount("/api", flask_asgi)
-            demo.app.mount("/flask", flask_asgi)
-
-            # Auto-redirect root to /studio so no iframe is needed!
-            async def auto_redirect(request):
-                return RedirectResponse(url="/studio")
-
-            demo.app.routes.insert(0, Route("/", auto_redirect))
-
-            print("Launching native Gradio on Hugging Face Spaces...")
-            demo.launch(
-                server_name="0.0.0.0",
-                server_port=7860,
-                show_error=True,
-                css="body, gradio-app, .gradio-container { padding: 0 !important; margin: 0 !important; max-width: 100% !important; overflow: hidden !important; background: #070a13 !important; } footer { display: none !important; }"
-            )
-        except Exception as err:
-            print(f"Server fallback: {err}")
-            socketio.run(app, host='0.0.0.0', port=port, debug=False, allow_unsafe_werkzeug=True)
+        print(f"Starting ZeroGPU Backend on Hugging Face Spaces (Port {port})...")
+        demo.launch(
+            server_name="0.0.0.0",
+            server_port=port,
+            show_error=True
+        )
     else:
-        print(f"Starting News Creation Studio with WebSockets on http://0.0.0.0:{port}")
+        print(f"Starting Shree News Studio server on http://0.0.0.0:{port}")
         socketio.run(app, host='0.0.0.0', port=port, debug=debug_mode, allow_unsafe_werkzeug=True)

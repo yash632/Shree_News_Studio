@@ -1,5 +1,5 @@
 ---
-title: AI News Broadcast Studio
+title: Shree News Studio
 emoji: 📺
 colorFrom: red
 colorTo: indigo
