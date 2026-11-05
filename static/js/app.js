@@ -9,11 +9,7 @@ function getBackendUrl() {
     if (saved && saved.trim()) {
         return saved.trim().replace(/\/+$/, '');
     }
-    // If running on Render or foreign host, default to Hugging Face backend
-    if (window.location.hostname.includes('onrender.com') || window.location.hostname.includes('vercel.app')) {
-        return 'https://yash632-shree-news-studio.hf.space';
-    }
-    return ''; // Same origin
+    return ''; // Same origin: Render hosts full stack directly
 }
 
 function setBackendUrl(url) {
@@ -1469,12 +1465,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // Upload progress listener
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable && event.total > 0) {
-                const percent = Math.min(25, Math.round((event.loaded / event.total) * 25));
-                progressPercent.textContent = `${percent}%`;
-                progressFill.style.width = `${percent}%`;
+                const uploadPercent = Math.round((event.loaded / event.total) * 100);
+                const overallPercent = Math.min(40, Math.round((event.loaded / event.total) * 40));
+                progressPercent.textContent = `${overallPercent}%`;
+                progressFill.style.width = `${overallPercent}%`;
                 const mbLoaded = (event.loaded / (1024 * 1024)).toFixed(1);
                 const mbTotal = (event.total / (1024 * 1024)).toFixed(1);
-                progressStatus.textContent = `Uploading video footage: ${mbLoaded}MB / ${mbTotal}MB (${percent}%)...`;
+                progressStatus.textContent = `Uploading footage: ${mbLoaded}MB / ${mbTotal}MB (${uploadPercent}% uploaded)...`;
             }
         };
 
@@ -1488,8 +1485,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (xhr.status === 200 && data.success) {
-                    progressPercent.textContent = '30%';
-                    progressFill.style.width = '30%';
+                    progressPercent.textContent = '45%';
+                    progressFill.style.width = '45%';
                     progressStatus.textContent = 'Media uploaded! Initializing video render...';
                     watchJobProgress(data.job_id);
                 } else {

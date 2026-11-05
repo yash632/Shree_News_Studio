@@ -599,7 +599,8 @@ if __name__ == '__main__':
         demo.launch(
             server_name="0.0.0.0",
             server_port=port,
-            show_error=True
+            show_error=True,
+            strict_cors=False
         )
     else:
         print(f"Starting Shree News Studio server on http://0.0.0.0:{port}")

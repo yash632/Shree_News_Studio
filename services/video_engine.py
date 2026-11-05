@@ -277,10 +277,10 @@ def render_news_video(
     job_prefix = os.path.splitext(os.path.basename(output_video_path))[0]
     
     if aspect_ratio == "9:16":
-        target_w, target_h = 1080, 1920
+        target_w, target_h = 720, 1280
         ticker_font_size = 28
     else:  # 16:9 Landscape default
-        target_w, target_h = 1920, 1080
+        target_w, target_h = 1280, 720
         ticker_font_size = 28
 
     if progress_callback:
@@ -516,8 +516,9 @@ def render_news_video(
         "-map", final_video_stream,
         "-map", "[aout]",
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
+        "-preset", "ultrafast",
+        "-threads", "0",
+        "-crf", "24",
         "-c:a", "aac",
         "-b:a", "192k",
         "-pix_fmt", "yuv420p",
