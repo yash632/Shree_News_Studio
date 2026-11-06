@@ -469,10 +469,11 @@ def create_news_overlay(
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     is_vertical = height > width
 
-    # Attempt pixel-perfect HTML rendering for both supported output sizes.
-    if (not is_vertical and width == 1920 and height == 1080) or (
-        is_vertical and width == 1080 and height == 1920
-    ):
+    # 1. Attempt pixel-perfect HTML rendering whenever Chrome/Chromium is available
+    chrome_bin = find_chrome_binary()
+    if chrome_bin:
+        ref_w = 1080 if is_vertical else 1920
+        ref_h = 1920 if is_vertical else 1080
         html_ok = render_html_overlay(
             headline_text=headline_text,
             sub_headline=sub_headline,
@@ -494,53 +495,98 @@ def create_news_overlay(
             frame_y=frame_y,
             frame_w=frame_w,
             frame_h=frame_h,
-            canvas_width=width,
-            canvas_height=height,
+            canvas_width=ref_w,
+            canvas_height=ref_h,
             logo_path=logo_path
         )
         if html_ok:
+            if (width, height) != (ref_w, ref_h) and os.path.exists(output_path):
+                try:
+                    img = Image.open(output_path)
+                    img = img.resize((width, height), Image.Resampling.LANCZOS)
+                    img.save(output_path, "PNG")
+                except Exception as e:
+                    print("Error resizing rendered HTML overlay:", e)
+
+            scale_x = width / float(ref_w)
+            scale_y = height / float(ref_h)
             if is_vertical:
                 if not enable_ticker:
                     v_ticker_x = -1
                 elif not enable_datetime:
-                    v_ticker_x = int(215 * (width / 941.0))
+                    v_ticker_x = int(int(215 * (ref_w / 941.0)) * scale_x)
                 else:
-                    v_ticker_x = int(455 * (width / 941.0))
-                return output_path, output_tag_path, v_ticker_x, int(1538 * (height / 1672.0))
+                    v_ticker_x = int(int(455 * (ref_w / 941.0)) * scale_x)
+                return output_path, output_tag_path, v_ticker_x, int(int(1538 * (ref_h / 1672.0)) * scale_y)
             if not enable_ticker:
                 ticker_start_x = -1
             elif not enable_datetime:
-                ticker_start_x = 288
+                ticker_start_x = int(288 * scale_x)
             else:
-                ticker_start_x = 698
-            ticker_y = 970
+                ticker_start_x = int(698 * scale_x)
+            ticker_y = int(970 * scale_y)
             return output_path, output_tag_path, ticker_start_x, ticker_y
 
-    # Fallback to Pillow Plate Composition (works for 9:16 or when headless browser is absent)
+    # Fallback to Pillow Plate Composition (works when headless browser is absent)
     canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     font_file = DEFAULT_FONT if os.path.exists(DEFAULT_FONT) else None
+    scale_x = width / 1920.0 if not is_vertical else width / 1080.0
+    scale_y = height / 1080.0 if not is_vertical else height / 1920.0
 
     # 1. Top Bar Plate ("आज की बड़ी खबर" + categories + "श्री NEWS 24x7" logo)
-    if enable_top_bar and os.path.exists(PLATE_TOP_BAR):
-        top_img = Image.open(PLATE_TOP_BAR).convert("RGBA")
-        if is_vertical:
-            top_w = width
-            top_h = int(top_img.height * (width / top_img.width))
-            top_img = top_img.resize((top_w, top_h), Image.Resampling.LANCZOS)
-            canvas.paste(top_img, (0, 0), top_img)
+    if enable_top_bar:
+        if os.path.exists(PLATE_TOP_BAR):
+            top_img = Image.open(PLATE_TOP_BAR).convert("RGBA")
+            if is_vertical:
+                top_w = width
+                top_h = int(top_img.height * (width / top_img.width))
+                top_img = top_img.resize((top_w, top_h), Image.Resampling.LANCZOS)
+                canvas.paste(top_img, (0, 0), top_img)
+            else:
+                canvas.paste(top_img, (0, 0), top_img)
         else:
-            canvas.paste(top_img, (0, 0), top_img)
+            d_top = ImageDraw.Draw(canvas)
+            top_h = int(72 * scale_y)
+            # Semi-transparent white header bar
+            d_top.rectangle([0, 0, width, top_h], fill=(255, 255, 255, 240))
+            # Crimson red badge on left
+            tab_w = int(280 * scale_x)
+            d_top.rectangle([0, 0, tab_w, top_h], fill=(220, 38, 38, 255))
+            # Gold bottom accent line under top bar
+            d_top.rectangle([0, top_h - max(1, int(3 * scale_y)), width, top_h], fill=(234, 179, 8, 255))
+            # "आज की बड़ी खबर" text
+            f_top = get_font(font_file, max(12, int(26 * scale_y)))
+            clean_top_text = shape_devanagari("आज की बड़ी खबर")
+            d_top.text((int(24 * scale_x), int(18 * scale_y)), clean_top_text, font=f_top, fill=(255, 255, 255, 255))
 
-    # Dynamic Custom Logo Overlay on Top Bar
-    if enable_top_bar and logo_path and os.path.exists(logo_path):
+            # News category pills on white area if not vertical
+            if not is_vertical:
+                f_cat = get_font(font_file, max(10, int(18 * scale_y)))
+                cats = ["भोपाल", "मध्य प्रदेश", "देश-विदेश"]
+                cur_x = tab_w + int(25 * scale_x)
+                for cat in cats:
+                    c_txt = shape_devanagari(cat)
+                    c_bbox = f_cat.getbbox(c_txt)
+                    cw = c_bbox[2] - c_bbox[0] + int(24 * scale_x)
+                    ch = int(36 * scale_y)
+                    cy = int((top_h - ch) / 2)
+                    d_top.rounded_rectangle([cur_x, cy, cur_x + cw, cy + ch], radius=int(6 * scale_y), fill=(241, 245, 249, 255), outline=(203, 213, 225, 255), width=1)
+                    d_top.text((cur_x + int(12 * scale_x), cy + int(7 * scale_y)), c_txt, font=f_cat, fill=(30, 41, 59, 255))
+                    cur_x += cw + int(15 * scale_x)
+
+    # Dynamic Custom or Default Logo Overlay on Top Bar
+    effective_logo = logo_path if (logo_path and os.path.exists(logo_path)) else os.path.join(PLATE_DIR, "logo.png")
+    if not os.path.exists(effective_logo):
+        effective_logo = os.path.join(PLATE_DIR, "shree_news_logo.png")
+    if enable_top_bar and os.path.exists(effective_logo):
         try:
-            custom_logo = Image.open(logo_path).convert("RGBA")
-            custom_logo.thumbnail((260, 140), Image.Resampling.LANCZOS)
-            lx = width - custom_logo.width - 25
-            ly = 15
+            custom_logo = Image.open(effective_logo).convert("RGBA")
+            custom_logo.thumbnail((max(40, int(260 * scale_x)), max(25, int(140 * scale_y))), Image.Resampling.LANCZOS)
+            lx = width - custom_logo.width - int(25 * scale_x)
+            ly = max(5, int(12 * scale_y))
             canvas.paste(custom_logo, (lx, ly), custom_logo)
         except Exception as e:
-            print(f"Custom logo paste error: {e}")
+            print(f"Logo paste error: {e}")
 
     # 2. Left Sidebar Plate ("मुख्य खबरें" 01 - 05)
     if enable_sidebar and os.path.exists(PLATE_SIDEBAR) and not is_vertical:
@@ -623,11 +669,75 @@ def create_news_overlay(
             canvas.paste(lt_img, (0, height - lt_h), lt_img)
         else:
             canvas.paste(lt_img, (0, 750), lt_img)
+        ticker_start_x = int(715 * (width / 1920.0))
+        ticker_y = int(960 if not is_vertical else (height - 65))
+    else:
+        # Dynamic Standalone Lower Third and Ticker Drawing
+        d_canvas = ImageDraw.Draw(canvas)
+        lt_y = int(750 * scale_y) if not is_vertical else int(height - 400 * scale_y)
+
+        # Breaking News Tag / Badge (left 3D styled box)
+        badge_w = int(360 * scale_x)
+        badge_h = int(140 * scale_y)
+        badge_x = int(20 * scale_x)
+
+        # Top dark red section
+        d_canvas.rectangle([badge_x, lt_y, badge_x + badge_w, lt_y + int(badge_h * 0.65)], fill=(185, 28, 28, 255))
+        # Bottom gold accent section
+        d_canvas.rectangle([badge_x, lt_y + int(badge_h * 0.65), badge_x + badge_w, lt_y + badge_h], fill=(245, 158, 11, 255))
+        # Gold highlight border
+        d_canvas.rectangle([badge_x, lt_y, badge_x + max(1, int(4 * scale_x)), lt_y + badge_h], fill=(253, 224, 71, 255))
+
+        f_badge = get_font(font_file, max(14, int(34 * scale_y)))
+        f_badge_sub = get_font(font_file, max(10, int(20 * scale_y)))
+        badge_display = badge_text.strip() if badge_text else "BREAKING NEWS"
+        d_canvas.text((badge_x + int(20 * scale_x), lt_y + int(14 * scale_y)), badge_display, font=f_badge, fill=(255, 255, 255, 255))
+        d_canvas.text((badge_x + int(24 * scale_x), lt_y + int(badge_h * 0.65) + int(6 * scale_y)), "LIVE BROADCAST", font=f_badge_sub, fill=(15, 23, 42, 255))
+
+        # Main Headline Red Bar
+        hl_x = badge_x + badge_w + int(8 * scale_x)
+        hl_w = width - hl_x - int(20 * scale_x)
+        hl_h = int(75 * scale_y)
+        d_canvas.rectangle([hl_x, lt_y, hl_x + hl_w, lt_y + hl_h], fill=(220, 38, 38, 245))
+        # Gold underline on headline bar
+        d_canvas.rectangle([hl_x, lt_y + hl_h - max(1, int(2 * scale_y)), hl_x + hl_w, lt_y + hl_h], fill=(234, 179, 8, 255))
+        f_hl = get_font(font_file, max(14, int(34 * scale_y)))
+        clean_headline = shape_devanagari(headline_text.strip())
+        d_canvas.text((hl_x + int(20 * scale_x), lt_y + int(14 * scale_y)), clean_headline, font=f_hl, fill=(255, 255, 255, 255))
+
+        # Sub-Headline White Bar
+        sub_y = lt_y + hl_h
+        sub_h = int(60 * scale_y)
+        d_canvas.rectangle([hl_x, sub_y, hl_x + hl_w, sub_y + sub_h], fill=(255, 255, 255, 245))
+        if sub_headline and sub_headline.strip():
+            f_sub = get_font(font_file, max(12, int(24 * scale_y)))
+            clean_sub = shape_devanagari(sub_headline.strip())
+            d_canvas.text((hl_x + int(20 * scale_x), sub_y + int(14 * scale_y)), clean_sub, font=f_sub, fill=(15, 23, 42, 255))
+
+        # Bottom Ticker Background Strip (Deep navy/black)
+        ticker_bar_y = int(980 * scale_y) if not is_vertical else int(height - 90 * scale_y)
+        ticker_bar_h = int(80 * scale_y)
+        d_canvas.rectangle([0, ticker_bar_y, width, ticker_bar_y + ticker_bar_h], fill=(15, 23, 42, 250))
+        # Top gold border on ticker
+        d_canvas.rectangle([0, ticker_bar_y, width, ticker_bar_y + max(1, int(3 * scale_y))], fill=(234, 179, 8, 255))
+
+        # Red tag pill on left ("ताज़ा ख़बर" or custom tag)
+        tag_w = int(240 * scale_x)
+        d_canvas.rectangle([0, ticker_bar_y, tag_w, ticker_bar_y + ticker_bar_h], fill=(220, 38, 38, 255))
+        f_tag = get_font(font_file, max(12, int(24 * scale_y)))
+        d_canvas.text((int(25 * scale_x), ticker_bar_y + int(20 * scale_y)), shape_devanagari(ticker_tag or "ताज़ा ख़बर"), font=f_tag, fill=(255, 255, 255, 255))
+
+        # Date & Time block between tag and ticker if enabled
+        dt_w = 0
+        if enable_datetime and not is_vertical:
+            dt_w = int(260 * scale_x)
+            d_canvas.rectangle([tag_w, ticker_bar_y, tag_w + dt_w, ticker_bar_y + ticker_bar_h], fill=(30, 41, 59, 255))
+            f_time = get_font(font_file, max(10, int(19 * scale_y)))
+            dt_str = f"{time_text or '10:25 AM'} | {date_text or '28 Oct 2026'}"
+            d_canvas.text((tag_w + int(12 * scale_x), ticker_bar_y + int(24 * scale_y)), dt_str, font=f_time, fill=(241, 245, 249, 255))
+
+        ticker_start_x = tag_w + dt_w + int(20 * scale_x)
+        ticker_y = ticker_bar_y + int(20 * scale_y)
 
     canvas.save(output_path, "PNG")
-
-    # Ticker coordinates
-    ticker_start_x = int(715 * (width / 1920.0))
-    ticker_y = int(960 if not is_vertical else (height - 65))
-
     return output_path, output_tag_path, ticker_start_x, ticker_y

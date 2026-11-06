@@ -344,13 +344,13 @@ def render_news_video(
     
     is_low_mem = is_low_memory_environment()
     if is_low_mem:
-        print("[RenderEngine] Low-Memory / Render mode active: using 720p ultrafast, threads=2 to stay safely within 512MB RAM.")
+        print("[RenderEngine] Low-Memory / Render mode active: using Full HD 1080p ultrafast, threads=2 (< 45MB RAM).")
         if aspect_ratio == "9:16":
-            target_w, target_h = 720, 1280
-            ticker_font_size = 22
+            target_w, target_h = 1080, 1920
+            ticker_font_size = 28
         else:
-            target_w, target_h = 1280, 720
-            ticker_font_size = 22
+            target_w, target_h = 1920, 1080
+            ticker_font_size = 28
         v_preset = "ultrafast"
         v_threads = "2"
         v_crf = "24"

@@ -7,12 +7,15 @@ ENV PORT=5000
 ENV RENDER=true
 ENV LOW_MEMORY_MODE=true
 
-# Install FFmpeg and essential fonts for text rendering
+# Install FFmpeg, Chromium for HTML overlay rendering, and Hindi fonts
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
+    fonts-deva \
     fonts-dejavu-core \
     fonts-noto-core \
     fonts-freefont-ttf \
+    chromium \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
