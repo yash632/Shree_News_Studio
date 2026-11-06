@@ -68,6 +68,8 @@ class _StudioScreenState extends State<StudioScreen> {
               _isWebViewReady = true;
             });
             _syncConfigToWeb();
+            Future.delayed(const Duration(milliseconds: 300), _syncConfigToWeb);
+            Future.delayed(const Duration(milliseconds: 800), _syncConfigToWeb);
           },
         ),
       )

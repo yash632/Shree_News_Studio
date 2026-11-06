@@ -132,3 +132,4 @@ class OverlayRendererService {
     return overlayFile.path;
   }
 }
+
