@@ -5,7 +5,12 @@ import time
 import datetime
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
-from flask_socketio import SocketIO, join_room, leave_room, emit
+try:
+    from flask_socketio import SocketIO, join_room, leave_room, emit
+    HAS_SOCKETIO = True
+except ImportError:
+    HAS_SOCKETIO = False
+    SocketIO = None
 from werkzeug.utils import secure_filename
 
 from config import (
@@ -23,47 +28,51 @@ from services.tts_service import generate_tts_audio
 
 app = Flask(__name__)
 CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-def emit_job_progress(job_id: str, job_data: dict):
-    """
-    Sends progress update strictly to the private room of the requesting client.
-    Guarantees that no other user receives someone else's progress or video data.
-    """
-    socketio.emit('job_progress', {
-        'success': True,
-        'job_id': job_id,
-        'job': job_data
-    }, room=job_id)
+if HAS_SOCKETIO:
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
 
-job_manager.set_progress_emitter(emit_job_progress)
-
-@socketio.on('join_job')
-def handle_join_job(data):
-    """Client subscribes exclusively to updates for their specific job_id."""
-    if not isinstance(data, dict):
-        return
-    job_id = data.get('job_id')
-    if not job_id:
-        return
-    join_room(job_id)
-    # Immediately send latest state if available
-    status = job_manager.get_job_status(job_id)
-    if status:
-        emit('job_progress', {
+    def emit_job_progress(job_id: str, job_data: dict):
+        """
+        Sends progress update strictly to the private room of the requesting client.
+        Guarantees that no other user receives someone else's progress or video data.
+        """
+        socketio.emit('job_progress', {
             'success': True,
             'job_id': job_id,
-            'job': status
+            'job': job_data
         }, room=job_id)
 
-@socketio.on('leave_job')
-def handle_leave_job(data):
-    """Client unsubscribes from the job room when rendering completes or fails."""
-    if not isinstance(data, dict):
-        return
-    job_id = data.get('job_id')
-    if job_id:
-        leave_room(job_id)
+    job_manager.set_progress_emitter(emit_job_progress)
+
+    @socketio.on('join_job')
+    def handle_join_job(data):
+        """Client subscribes exclusively to updates for their specific job_id."""
+        if not isinstance(data, dict):
+            return
+        job_id = data.get('job_id')
+        if not job_id:
+            return
+        join_room(job_id)
+        # Immediately send latest state if available
+        status = job_manager.get_job_status(job_id)
+        if status:
+            emit('job_progress', {
+                'success': True,
+                'job_id': job_id,
+                'job': status
+            }, room=job_id)
+
+    @socketio.on('leave_job')
+    def handle_leave_job(data):
+        """Client unsubscribes from the job room when rendering completes or fails."""
+        if not isinstance(data, dict):
+            return
+        job_id = data.get('job_id')
+        if job_id:
+            leave_room(job_id)
+else:
+    socketio = None
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['OUTPUT_FOLDER'] = OUTPUT_FOLDER
@@ -521,5 +530,8 @@ start_cleanup_daemon(interval_seconds=180)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f"Starting News Creation Studio with WebSockets on http://localhost:{port}")
-    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+    print(f"Starting News Creation Studio on http://localhost:{port}")
+    if socketio:
+        socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)
+    else:
+        app.run(host='0.0.0.0', port=port, debug=True)
