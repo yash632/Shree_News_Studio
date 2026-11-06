@@ -28,7 +28,7 @@ jobs:
 
       - name: Scaffold Clean Official Flutter Project
         run: |
-          # 1. Create a pristine official app scaffold
+          # 1. Create pristine official app scaffold
           flutter create -t app --org com.shreenews --project-name shree_news_studio clean_app
           
           # 2. Transfer our code, assets and dependencies
@@ -47,7 +47,19 @@ jobs:
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle.kts || true
           fi
 
-          # 4. Add Permissions to AndroidManifest.xml
+          # 4. Add Appodeal Maven mirror for ffmpeg-kit-full-gpl binaries
+          cat << 'EOF' >> clean_app/android/build.gradle
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  maven { url "https://artifactory.appodeal.com/appodeal-public/" }
+                  maven { url "https://jitpack.io" }
+              }
+          }
+          EOF
+
+          # 5. Add Permissions to AndroidManifest.xml
           sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"\/>' clean_app/android/app/src/main/AndroidManifest.xml
 
       - name: Build Android Release APK
