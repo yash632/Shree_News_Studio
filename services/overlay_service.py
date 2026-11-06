@@ -1,4 +1,6 @@
 import os
+import sys
+import gc
 import shutil
 import subprocess
 import textwrap
@@ -407,6 +409,9 @@ if (document.fonts && document.fonts.ready) {{
             '--hide-scrollbars',
             '--allow-file-access-from-files',
             '--disable-dev-shm-usage',
+            '--disable-software-rasterizer',
+            '--renderer-process-limit=1',
+            '--js-flags=--max-old-space-size=128',
             f'--user-data-dir={chrome_profile}',
             '--disable-extensions',
             '--no-first-run',
@@ -417,11 +422,14 @@ if (document.fonts && document.fonts.ready) {{
             f'--window-size={canvas_width},{canvas_height}',
             file_url
         ]
+        if sys.platform.startswith("linux"):
+            cmd.extend(['--single-process', '--no-zygote'])
 
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         finally:
             shutil.rmtree(chrome_profile, ignore_errors=True)
+            gc.collect()
         if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
             # Keep the browser's z-index layering intact. Layout elements above
             # the footage window must remain visible in the exported composite.
@@ -462,18 +470,14 @@ def create_news_overlay(
     frame_h: int = 567
 ) -> tuple:
     """
-    Composites broadcast graphics onto a transparent 1920x1080 canvas.
-    Uses Chrome/Edge headless snapshot for 100% exact fidelity with the user's template,
-    with an automatic fallback to Pillow plate composition.
+    Composites broadcast graphics onto a transparent canvas.
+    Uses Chrome/Edge headless snapshot for 100% exact fidelity with the user's Web UI template (frontend/index.html).
     """
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     is_vertical = height > width
 
-    # In low-memory cloud environments (e.g. Render 512MB RAM), skip Chromium entirely
-    # to avoid 300MB RAM spike and use ultra-lightweight Pillow directly (< 5MB RAM, instant).
-    # On local workstations (16GB RAM), allow Chrome if available for full HTML fidelity.
-    is_low_mem = is_low_memory_environment()
-    chrome_bin = find_chrome_binary() if not is_low_mem else None
+    # Always use Chrome/Edge headless snapshot of the user's exact Web UI template
+    chrome_bin = find_chrome_binary()
     if chrome_bin:
         ref_w = 1080 if is_vertical else 1920
         ref_h = 1920 if is_vertical else 1080
