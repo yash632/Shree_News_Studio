@@ -20,6 +20,7 @@ class OverlayRendererService {
     required BroadcastConfig config,
     required int targetWidth,
     required int targetHeight,
+    String? customLogoPath,
   }) async {
     final isVertical = targetHeight > targetWidth;
     final plateAsset = isVertical
@@ -34,15 +35,52 @@ class OverlayRendererService {
       ui.Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble()),
     );
 
-    final double scaleX = targetWidth / 1920.0;
-    final double scaleY = targetHeight / 1080.0;
+    final double scaleX = targetWidth / (isVertical ? 1080.0 : 1920.0);
+    final double scaleY = targetHeight / (isVertical ? 1920.0 : 1080.0);
 
     // 1. Draw the master broadcast plate with 100% web design (3D chevrons, 3 cards, banner, logo)
     final srcRect = ui.Rect.fromLTWH(0, 0, plate.width.toDouble(), plate.height.toDouble());
     final dstRect = ui.Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble());
     canvas.drawImageRect(plate, srcRect, dstRect, ui.Paint());
 
-    // 2. Draw Main News Headline (Hind-Bold with correct HarfBuzz Devanagari ligatures)
+    // 2. If Top Bar toggle is OFF, clear top region
+    if (!config.enableTopBar && !isVertical) {
+      canvas.drawRect(
+        ui.Rect.fromLTWH(0, 0, targetWidth.toDouble(), 155 * scaleY),
+        ui.Paint()..blendMode = ui.BlendMode.clear,
+      );
+    }
+
+    // 3. Custom Logo overlay if supplied
+    if (config.enableTopBar && customLogoPath != null && File(customLogoPath).existsSync()) {
+      try {
+        final logoBytes = await File(customLogoPath).readAsBytes();
+        final logoCodec = await ui.instantiateImageCodec(logoBytes);
+        final logoFrame = await logoCodec.getNextFrame();
+        final logoImg = logoFrame.image;
+
+        final logoX = (isVertical ? 780 : 1625) * scaleX;
+        final logoY = (isVertical ? 20 : 0) * scaleY;
+        final logoW = (isVertical ? 240 : 295) * scaleX;
+        final logoH = (isVertical ? 140 : 172) * scaleY;
+
+        // Clear default logo and paste custom logo
+        canvas.drawRect(
+          ui.Rect.fromLTWH(logoX, logoY, logoW, logoH),
+          ui.Paint()..blendMode = ui.BlendMode.clear,
+        );
+        canvas.drawImageRect(
+          logoImg,
+          ui.Rect.fromLTWH(0, 0, logoImg.width.toDouble(), logoImg.height.toDouble()),
+          ui.Rect.fromLTWH(logoX, logoY, logoW, logoH),
+          ui.Paint(),
+        );
+      } catch (e) {
+        print("Custom logo rendering error: $e");
+      }
+    }
+
+    // 4. Draw Main News Headline (Hind-Bold with correct HarfBuzz Devanagari ligatures)
     if (config.headlineText.trim().isNotEmpty) {
       final double hlX = (isVertical ? 40 : 545) * scaleX;
       final double hlY = (isVertical ? 1410 : 775) * scaleY;
@@ -74,7 +112,7 @@ class OverlayRendererService {
       textPainter.paint(canvas, ui.Offset(hlX, hlY));
     }
 
-    // 3. Draw Sub-Headline (Hind-SemiBold)
+    // 5. Draw Sub-Headline (Hind-SemiBold)
     if (config.subHeadline.trim().isNotEmpty) {
       final double subX = (isVertical ? 40 : 545) * scaleX;
       final double subY = (isVertical ? 1485 : 880) * scaleY;
@@ -99,7 +137,7 @@ class OverlayRendererService {
       subPainter.paint(canvas, ui.Offset(subX, subY));
     }
 
-    // 4. Draw Location Tag (if enabled)
+    // 6. Draw Location Tag (if enabled)
     if (config.enableLocation && config.locationText.trim().isNotEmpty && !isVertical) {
       final cleanLoc = config.locationText.replaceAll('📍', '').trim();
       final locPainter = TextPainter(
@@ -119,7 +157,15 @@ class OverlayRendererService {
       locPainter.paint(canvas, ui.Offset(1185 * scaleX, 203 * scaleY));
     }
 
-    // 5. Export to PNG
+    // 7. If Ticker toggle is OFF, clear bottom ticker area
+    if (!config.enableTicker && !isVertical) {
+      canvas.drawRect(
+        ui.Rect.fromLTWH(0, 948 * scaleY, targetWidth.toDouble(), 132 * scaleY),
+        ui.Paint()..blendMode = ui.BlendMode.clear,
+      );
+    }
+
+    // 8. Export to PNG
     final picture = recorder.endRecording();
     final img = await picture.toImage(targetWidth, targetHeight);
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
@@ -132,4 +178,3 @@ class OverlayRendererService {
     return overlayFile.path;
   }
 }
-

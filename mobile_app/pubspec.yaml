@@ -31,6 +31,9 @@ dependencies:
   # Open Exported Broadcast Video in System Player
   open_file: ^3.5.10
 
+  # High-Performance Video Player for Live Monitor & Output Preview
+  video_player: ^2.9.2
+
   # UI Enhancement Icons
   cupertino_icons: ^1.0.8
 
