@@ -234,6 +234,43 @@ def build_video_filter_graph(
     filter_complex_str = ";".join(filters)
     return extra_inputs, filter_complex_str, current_stream
 
+def is_low_memory_environment() -> bool:
+    """
+    Detects if the application is running in a memory-constrained environment
+    such as Render.com free tier (512MB RAM) or a container with < 1.5GB RAM.
+    On local machines (e.g. user's 16GB laptop), returns False so full 1080p,
+    maximum CPU threads, and best quality settings are used.
+    """
+    if os.environ.get("RENDER") == "true" or "RENDER_SERVICE_ID" in os.environ or "RENDER_INSTANCE_ID" in os.environ:
+        return True
+
+    env_override = os.environ.get("LOW_MEMORY_MODE", "").lower()
+    if env_override in ("true", "1", "yes"):
+        return True
+    if env_override in ("false", "0", "no"):
+        return False
+
+    if os.path.exists("/proc/meminfo"):
+        try:
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        kb = int(line.split()[1])
+                        if kb < 1500000:
+                            return True
+        except Exception:
+            pass
+
+    try:
+        import psutil
+        total_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+        if total_ram_gb < 1.5:
+            return True
+    except Exception:
+        pass
+
+    return False
+
 def render_news_video(
     video_input_path: str,
     audio_input_path: str,
@@ -273,16 +310,35 @@ def render_news_video(
 ) -> bool:
     """
     Renders professional broadcast news video matching Screenshot 2.
+    Automatically optimizes between Render free tier (512MB RAM - 720p ultrafast)
+    and Local workstation (16GB RAM - 1080p full quality).
     """
     work_dir = os.path.dirname(output_video_path)
     job_prefix = os.path.splitext(os.path.basename(output_video_path))[0]
     
-    if aspect_ratio == "9:16":
-        target_w, target_h = 1080, 1920
-        ticker_font_size = 28
-    else:  # 16:9 Landscape default
-        target_w, target_h = 1920, 1080
-        ticker_font_size = 28
+    is_low_mem = is_low_memory_environment()
+    if is_low_mem:
+        print("[RenderEngine] Low-Memory / Render mode active: using 720p ultrafast, threads=2 to stay safely within 512MB RAM.")
+        if aspect_ratio == "9:16":
+            target_w, target_h = 720, 1280
+            ticker_font_size = 22
+        else:
+            target_w, target_h = 1280, 720
+            ticker_font_size = 22
+        v_preset = "ultrafast"
+        v_threads = "2"
+        v_crf = "24"
+    else:
+        print("[RenderEngine] High-RAM / Local mode active: using Full HD 1080p, veryfast, threads=0 (all cores).")
+        if aspect_ratio == "9:16":
+            target_w, target_h = 1080, 1920
+            ticker_font_size = 28
+        else:
+            target_w, target_h = 1920, 1080
+            ticker_font_size = 28
+        v_preset = "veryfast"
+        v_threads = "0"
+        v_crf = "23"
 
     if progress_callback:
         progress_callback(10, "Analyzing audio and video duration...")
@@ -527,13 +583,15 @@ def render_news_video(
         "-map", final_video_stream,
         "-map", "[aout]",
         "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "23",
+        "-preset", v_preset,
+        "-threads", v_threads,
+        "-crf", v_crf,
         "-c:a", "aac",
         "-b:a", "192k",
         "-pix_fmt", "yuv420p",
         "-t", str(target_duration),
         "-movflags", "+faststart",
+        "-progress", "pipe:1",
         output_video_path
     ]
 
@@ -541,6 +599,7 @@ def render_news_video(
         progress_callback(55, "Rendering broadcast video...")
 
     try:
+        import threading
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -549,7 +608,41 @@ def render_news_video(
             encoding="utf-8",
             errors="replace"
         )
-        _, stderr_output = process.communicate()
+
+        stderr_lines = []
+        def drain_stderr():
+            try:
+                for s_line in process.stderr:
+                    stderr_lines.append(s_line)
+                    if len(stderr_lines) > 80:
+                        stderr_lines.pop(0)
+            except Exception:
+                pass
+
+        t_err = threading.Thread(target=drain_stderr, daemon=True)
+        t_err.start()
+
+        last_progress_pct = 55
+        if process.stdout:
+            for line in process.stdout:
+                line = line.strip()
+                if line.startswith("out_time_us="):
+                    try:
+                        time_us = int(line.split("=")[1])
+                        curr_sec = time_us / 1_000_000.0
+                        if target_duration > 0:
+                            pct = int(55 + min(40, (curr_sec / target_duration) * 40))
+                            if pct > last_progress_pct and progress_callback:
+                                last_progress_pct = pct
+                                progress_callback(pct, f"Rendering broadcast video ({int(curr_sec)}s / {int(target_duration)}s)...")
+                    except Exception:
+                        pass
+                elif line.startswith("progress=end"):
+                    break
+
+        process.wait()
+        t_err.join(timeout=2.0)
+        stderr_output = "".join(stderr_lines)
 
         if process.returncode != 0:
             print(f"FFmpeg failed with code {process.returncode}:\n{stderr_output}")

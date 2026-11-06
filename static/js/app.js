@@ -1448,15 +1448,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', '/api/generate', true);
 
+        const uploadStartTime = Date.now();
         // Upload progress listener
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable && event.total > 0) {
-                const percent = Math.min(25, Math.round((event.loaded / event.total) * 25));
-                progressPercent.textContent = `${percent}%`;
-                progressFill.style.width = `${percent}%`;
+                const uploadPercent = Math.round((event.loaded / event.total) * 100);
+                const overallPercent = Math.min(30, Math.round((event.loaded / event.total) * 30));
+                progressPercent.textContent = `${overallPercent}%`;
+                progressFill.style.width = `${overallPercent}%`;
                 const mbLoaded = (event.loaded / (1024 * 1024)).toFixed(1);
                 const mbTotal = (event.total / (1024 * 1024)).toFixed(1);
-                progressStatus.textContent = `Uploading video footage: ${mbLoaded}MB / ${mbTotal}MB (${percent}%)...`;
+                const elapsed = (Date.now() - uploadStartTime) / 1000;
+                const speed = elapsed > 0.5 ? ((event.loaded / (1024 * 1024)) / elapsed).toFixed(1) : '';
+                const speedTag = speed ? ` [${speed} MB/s]` : '';
+                progressStatus.textContent = `Uploading footage: ${mbLoaded}MB / ${mbTotal}MB (${uploadPercent}%)${speedTag}...`;
             }
         };
 
