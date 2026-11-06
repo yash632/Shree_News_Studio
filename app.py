@@ -1,4 +1,5 @@
 import os
+import shutil
 import uuid
 import time
 import datetime
@@ -221,6 +222,7 @@ def generate_video():
     restart_footage = request.form.get('restart_footage', 'false').lower() in ('true', '1', 'yes', 'on')
     outro_text = request.form.get('outro_text', '').strip()
     restart_outro_footage = request.form.get('restart_outro_footage', 'false').lower() in ('true', '1', 'yes', 'on')
+    mute_during_anchor = request.form.get('mute_during_anchor', 'false').lower() in ('true', '1', 'yes', 'on')
 
     # Optional Broadcast Elements from Screenshot 2
     # HTML checkboxes send value when checked, send NOTHING when unchecked
@@ -295,7 +297,8 @@ def generate_video():
         ground_clip_duration=ground_clip_duration,
         restart_footage=restart_footage,
         outro_text=outro_text,
-        restart_outro_footage=restart_outro_footage
+        restart_outro_footage=restart_outro_footage,
+        mute_during_anchor=mute_during_anchor
     )
 
     return jsonify({

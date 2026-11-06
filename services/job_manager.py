@@ -95,7 +95,8 @@ class JobManager:
         ground_clip_duration: float = 10.0,
         restart_footage: bool = False,
         outro_text: str = "",
-        restart_outro_footage: bool = False
+        restart_outro_footage: bool = False,
+        mute_during_anchor: bool = True
     ):
         thread = threading.Thread(
             target=self._run_job,
@@ -135,7 +136,8 @@ class JobManager:
                 ground_clip_duration,
                 restart_footage,
                 outro_text,
-                restart_outro_footage
+                restart_outro_footage,
+                mute_during_anchor
             ),
             daemon=True
         )
@@ -178,7 +180,8 @@ class JobManager:
         ground_clip_duration: float = 10.0,
         restart_footage: bool = False,
         outro_text: str = "",
-        restart_outro_footage: bool = False
+        restart_outro_footage: bool = False,
+        mute_during_anchor: bool = True
     ):
         audio_path = None
         try:
@@ -288,6 +291,7 @@ class JobManager:
                 restart_footage=restart_footage,
                 outro_audio_path=outro_audio_path,
                 restart_outro_footage=restart_outro_footage,
+                mute_during_anchor=mute_during_anchor,
                 progress_callback=progress_cb
             )
 

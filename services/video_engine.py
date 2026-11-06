@@ -268,6 +268,7 @@ def render_news_video(
     restart_footage: bool = False,
     outro_audio_path: Optional[str] = None,
     restart_outro_footage: bool = False,
+    mute_during_anchor: bool = True,
     progress_callback: Optional[Callable[[int, str], None]] = None
 ) -> bool:
     """
@@ -424,6 +425,8 @@ def render_news_video(
     # Build Broadcast Audio Mixing Filter Graph
     has_video_aud = has_audio_stream(video_input_path)
     footage_vol = max(0.0, min(1.0, float(footage_volume)))
+    intro_vol = 0.0 if mute_during_anchor else footage_vol
+    outro_vol = 0.0 if mute_during_anchor else footage_vol
 
     audio_filters = []
     if not has_anchor_aud:
@@ -431,7 +434,7 @@ def render_news_video(
             audio_filters.append(f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[aout]")
         else:
             audio_filters.append(f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]")
-    elif audio_mix_mode == "voiceover_only" or not has_video_aud or footage_vol <= 0.001:
+    elif audio_mix_mode == "voiceover_only" or not has_video_aud or (audio_mix_mode == "voiceover_ambient" and footage_vol <= 0.001):
         if audio_mix_mode == "intro_then_ground_outro" and has_outro_aud:
             audio_filters.append(
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
@@ -444,67 +447,75 @@ def render_news_video(
         if restart_footage and restart_outro_footage:
             audio_filters.append(
                 f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={footage_vol:.2f}[a1_cut];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
                 f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a_raw3]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={footage_vol:.2f}[a3_cut];"
+                f"[a_raw3]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
                 f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
                 f"[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest[aout]"
+                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
         elif restart_footage and not restart_outro_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={footage_vol:.2f}[a1_cut];"
-                f"[a_raw2]atrim=0:{ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a1_cut][a2_cut]concat=n=2:v=0:a=1[a_restarted];"
-                f"[a_restarted]volume='if(between(t,{audio_duration:.2f},{audio_duration + ground_dur:.2f}),1.0,{footage_vol:.2f})':eval=frame[footage_stream];"
+                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[a_raw3]atrim={ground_dur:.2f}:{ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
                 f"[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest[aout]"
+                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
         elif not restart_footage and restart_outro_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
-                f"[a_raw1]atrim=0:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume='if(lt(t,{audio_duration:.2f}),{footage_vol:.2f},1.0)':eval=frame[a12_cut];"
-                f"[a_raw2]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={footage_vol:.2f}[a3_cut];"
-                f"[a12_cut][a3_cut]concat=n=2:v=0:a=1[footage_stream];"
+                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[a_raw3]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
                 f"[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest[aout]"
+                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
         else:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume='if(between(t,{audio_duration:.2f},{audio_duration + ground_dur:.2f}),1.0,{footage_vol:.2f})':eval=frame[footage_stream];"
+                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[a_raw3]atrim={audio_duration + ground_dur:.2f}:{audio_duration + ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
                 f"[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest[aout]"
+                f"[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
     elif audio_mix_mode == "intro_then_ground":
         if restart_footage:
             audio_filters.append(
                 f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={footage_vol:.2f}[a1t];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1t];"
                 f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2t];"
                 f"[a1t][a2t]concat=n=2:v=0:a=1[a_ground_seq];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={target_duration:.2f}[a_vca];"
-                f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest[aout]"
+                f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
         else:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume='if(lt(t,{audio_duration:.2f}),{footage_vol:.2f},1.0)':eval=frame[a_ground_seq];"
+                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
+                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1t];"
+                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2t];"
+                f"[a1t][a2t]concat=n=2:v=0:a=1[a_ground_seq];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={target_duration:.2f}[a_vca];"
-                f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest[aout]"
+                f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
     else:  # "voiceover_ambient" default
         audio_filters.append(
             f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,volume={footage_vol:.2f}[vga];"
             f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=1.0[vca];"
-            f"[vca][vga]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            f"[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]"
         )
 
     full_filter_complex = filter_complex + ";" + ";".join(audio_filters)

@@ -135,33 +135,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const footageVolumeRange = document.getElementById('footageVolumeRange');
     const footageVolumeBadge = document.getElementById('footageVolumeBadge');
     const mode2Options = document.getElementById('mode2Options');
+    const muteDuringAnchorToggle = document.getElementById('muteDuringAnchorToggle');
     const groundDurationRange = document.getElementById('groundDurationRange');
     const groundDurationBadge = document.getElementById('groundDurationBadge');
     const outroScriptGroup = document.getElementById('outroScriptGroup');
     const outroTextInput = document.getElementById('outroTextInput');
     const outroCharCount = document.getElementById('outroCharCount');
 
+    function updateAudioControlsVisibility() {
+        const mode = audioMixModeSelect ? audioMixModeSelect.value : 'voiceover_only';
+        const isMuteDuringAnchor = muteDuringAnchorToggle ? muteDuringAnchorToggle.checked : true;
+
+        if (mode === 'intro_then_ground_outro') {
+            if (mode2Options) mode2Options.style.display = 'block';
+            if (outroScriptGroup) outroScriptGroup.style.display = 'block';
+            if (footageVolumeGroup) footageVolumeGroup.style.display = isMuteDuringAnchor ? 'none' : 'block';
+        } else if (mode === 'intro_then_ground') {
+            if (mode2Options) mode2Options.style.display = 'block';
+            if (outroScriptGroup) outroScriptGroup.style.display = 'none';
+            if (footageVolumeGroup) footageVolumeGroup.style.display = isMuteDuringAnchor ? 'none' : 'block';
+        } else if (mode === 'voiceover_only') {
+            if (footageVolumeGroup) footageVolumeGroup.style.display = 'none';
+            if (mode2Options) mode2Options.style.display = 'none';
+            if (outroScriptGroup) outroScriptGroup.style.display = 'none';
+        } else { // voiceover_ambient
+            if (footageVolumeGroup) footageVolumeGroup.style.display = 'block';
+            if (mode2Options) mode2Options.style.display = 'none';
+            if (outroScriptGroup) outroScriptGroup.style.display = 'none';
+        }
+    }
+
     if (audioMixModeSelect) {
         audioMixModeSelect.addEventListener('change', () => {
             stopTimelinePreview();
-            const mode = audioMixModeSelect.value;
-            if (mode === 'intro_then_ground_outro') {
-                if (footageVolumeGroup) footageVolumeGroup.style.display = 'block';
-                if (mode2Options) mode2Options.style.display = 'block';
-                if (outroScriptGroup) outroScriptGroup.style.display = 'block';
-            } else if (mode === 'intro_then_ground') {
-                if (footageVolumeGroup) footageVolumeGroup.style.display = 'block';
-                if (mode2Options) mode2Options.style.display = 'block';
-                if (outroScriptGroup) outroScriptGroup.style.display = 'none';
-            } else if (mode === 'voiceover_only') {
-                if (footageVolumeGroup) footageVolumeGroup.style.display = 'none';
-                if (mode2Options) mode2Options.style.display = 'none';
-                if (outroScriptGroup) outroScriptGroup.style.display = 'none';
-            } else {
-                if (footageVolumeGroup) footageVolumeGroup.style.display = 'block';
-                if (mode2Options) mode2Options.style.display = 'none';
-                if (outroScriptGroup) outroScriptGroup.style.display = 'none';
-            }
+            updateAudioControlsVisibility();
+        });
+    }
+
+    if (muteDuringAnchorToggle) {
+        muteDuringAnchorToggle.addEventListener('change', () => {
+            stopTimelinePreview();
+            updateAudioControlsVisibility();
         });
     }
 
@@ -492,8 +506,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
             } else if (mode === 'intro_then_ground') {
-                setVideoFootageAudio(footageVol, false);
-                if (timelineCurrentStage) timelineCurrentStage.textContent = `🎙️ Stage 1: Anchor Intro (Footage: ${Math.round(footageVol * 100)}%)`;
+                const muteDuringAnchor = document.getElementById('muteDuringAnchorToggle')?.checked ?? true;
+                const introVol = muteDuringAnchor ? 0.0 : footageVol;
+                setVideoFootageAudio(introVol, introVol === 0);
+                if (timelineCurrentStage) {
+                    timelineCurrentStage.textContent = muteDuringAnchor
+                        ? `🎙️ Stage 1: Anchor Intro (Footage Muted)`
+                        : `🎙️ Stage 1: Anchor Intro (Footage Ambient: ${Math.round(introVol * 100)}%)`;
+                }
                 previewIntroAudio.volume = 1.0;
                 previewIntroAudio.play();
 
@@ -525,8 +545,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
 
             } else if (mode === 'intro_then_ground_outro') {
-                setVideoFootageAudio(footageVol, false);
-                if (timelineCurrentStage) timelineCurrentStage.textContent = `🎙️ Stage 1: Anchor Intro (Footage: ${Math.round(footageVol * 100)}%)`;
+                const muteDuringAnchor = document.getElementById('muteDuringAnchorToggle')?.checked ?? true;
+                const introVol = muteDuringAnchor ? 0.0 : footageVol;
+                const outroVol = muteDuringAnchor ? 0.0 : footageVol;
+                setVideoFootageAudio(introVol, introVol === 0);
+                if (timelineCurrentStage) {
+                    timelineCurrentStage.textContent = muteDuringAnchor
+                        ? `🎙️ Stage 1: Anchor Intro (Footage Muted)`
+                        : `🎙️ Stage 1: Anchor Intro (Footage Ambient: ${Math.round(introVol * 100)}%)`;
+                }
                 previewIntroAudio.volume = 1.0;
                 previewIntroAudio.play();
 
@@ -557,8 +584,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (!isTimelinePreviewActive) return;
                             const restartOutro = document.getElementById('restartOutroFootageToggle')?.checked || false;
                             if (restartOutro) restartVideoFootage();
-                            setVideoFootageAudio(footageVol, false);
-                            if (timelineCurrentStage) timelineCurrentStage.textContent = `📺 Stage 3: Anchor Outro / Sign-off${restartOutro ? ' (Video Restarted)' : ''}`;
+                            setVideoFootageAudio(outroVol, outroVol === 0);
+                            if (timelineCurrentStage) {
+                                const outroStatus = outroVol === 0 ? '(Footage Muted)' : `(Footage: ${Math.round(outroVol * 100)}%)`;
+                                timelineCurrentStage.textContent = `📺 Stage 3: Anchor Outro / Sign-off${restartOutro ? ' (Video Restarted)' : ''} ${outroStatus}`;
+                            }
 
                             if (previewOutroAudio) {
                                 previewOutroAudio.volume = 1.0;
@@ -1137,6 +1167,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (outroTextInput) outroTextInput.addEventListener('input', debouncedSaveSettings);
     const restartOutroToggleEl = document.getElementById('restartOutroFootageToggle');
     if (restartOutroToggleEl) restartOutroToggleEl.addEventListener('change', debouncedSaveSettings);
+    const muteDuringAnchorToggleEl = document.getElementById('muteDuringAnchorToggle');
+    if (muteDuringAnchorToggleEl) muteDuringAnchorToggleEl.addEventListener('change', debouncedSaveSettings);
 
     // LocalStorage Settings Persistence
     const SETTINGS_STORAGE_KEY = 'ai_news_studio_user_settings_v1';
@@ -1173,6 +1205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 footage_volume: footageVolumeRange ? footageVolumeRange.value : '20',
                 ground_clip_duration: groundDurationRange ? groundDurationRange.value : '10',
                 restart_footage: restartFootageToggle ? restartFootageToggle.checked : false,
+                mute_during_anchor: document.getElementById('muteDuringAnchorToggle')?.checked ?? true,
                 outro_text: outroTextInput ? outroTextInput.value : '',
                 restart_outro_footage: document.getElementById('restartOutroFootageToggle')?.checked || false
             };
@@ -1271,6 +1304,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (restartOutroToggle && s.restart_outro_footage !== undefined) {
                 restartOutroToggle.checked = s.restart_outro_footage;
             }
+            const muteToggle = document.getElementById('muteDuringAnchorToggle');
+            if (muteToggle && s.mute_during_anchor !== undefined) {
+                muteToggle.checked = s.mute_during_anchor;
+            }
+            updateAudioControlsVisibility();
         } catch (e) {
             console.warn('Could not load settings:', e);
         }
@@ -1380,6 +1418,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const formData = new FormData(form);
+
+        // Ensure leftover audio file is not uploaded when mode is TTS
+        if (audioModeInput.value !== 'upload') {
+            formData.delete('audio');
+        }
+        // Ensure empty logo is not uploaded
+        if (!logoInput.files || logoInput.files.length === 0) {
+            formData.delete('logo');
+        }
 
         generateBtn.disabled = true;
         generateBtn.innerHTML = `<span class="btn-icon">⏳</span><span>SUBMITTING JOB...</span>`;
