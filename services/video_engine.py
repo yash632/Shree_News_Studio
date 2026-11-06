@@ -68,10 +68,13 @@ def build_video_filter_graph(
     current_input_start: int = 2,
     restart_outro_footage: bool = False,
     ground_duration: float = 0.0,
-    outro_duration: float = 0.0
+    outro_duration: float = 0.0,
+    ground_vid_input_idx: int = 0,
+    outro_vid_input_idx: int = 0
 ) -> tuple:
     """
     Builds the FFmpeg -filter_complex chain matching Screenshot 2.
+    Zero in-memory buffering: uses dedicated input streams instead of split.
     """
     extra_inputs = []
     filters = []
@@ -98,26 +101,23 @@ def build_video_filter_graph(
     if audio_mix_mode == "intro_then_ground_outro" and intro_duration > 0 and outro_duration > 0 and ground_duration > 0:
         if restart_footage and restart_outro_footage:
             filters.append(
-                f"[0:v]split=3[v_raw1][v_raw2][v_raw3];"
-                f"[v_raw1]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
-                f"[v_raw2]trim=0:{ground_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
-                f"[v_raw3]trim=0:{outro_duration:.2f},setpts=PTS-STARTPTS[v3_cut];"
+                f"[0:v]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
+                f"[{ground_vid_input_idx}:v]trim=0:{ground_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
+                f"[{outro_vid_input_idx}:v]trim=0:{outro_duration:.2f},setpts=PTS-STARTPTS[v3_cut];"
                 f"[v1_cut][v2_cut][v3_cut]concat=n=3:v=1:a=0[v_seq]"
             )
             base_v_in = "[v_seq]"
         elif restart_footage and not restart_outro_footage:
             filters.append(
-                f"[0:v]split=2[v_raw1][v_raw2];"
-                f"[v_raw1]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
-                f"[v_raw2]trim=0:{ground_duration + outro_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
+                f"[0:v]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
+                f"[{ground_vid_input_idx}:v]trim=0:{ground_duration + outro_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
                 f"[v1_cut][v2_cut]concat=n=2:v=1:a=0[v_seq]"
             )
             base_v_in = "[v_seq]"
         elif not restart_footage and restart_outro_footage:
             filters.append(
-                f"[0:v]split=2[v_raw1][v_raw2];"
-                f"[v_raw1]trim=0:{intro_duration + ground_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
-                f"[v_raw2]trim=0:{outro_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
+                f"[0:v]trim=0:{intro_duration + ground_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
+                f"[{outro_vid_input_idx}:v]trim=0:{outro_duration:.2f},setpts=PTS-STARTPTS[v2_cut];"
                 f"[v1_cut][v2_cut]concat=n=2:v=1:a=0[v_seq]"
             )
             base_v_in = "[v_seq]"
@@ -126,9 +126,8 @@ def build_video_filter_graph(
     elif restart_footage and audio_mix_mode == "intro_then_ground" and intro_duration > 0 and total_duration > intro_duration:
         ground_dur = max(2.0, total_duration - intro_duration)
         filters.append(
-            f"[0:v]split=2[v_raw1][v_raw2];"
-            f"[v_raw1]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
-            f"[v_raw2]trim=0:{ground_dur:.2f},setpts=PTS-STARTPTS[v2_cut];"
+            f"[0:v]trim=0:{intro_duration:.2f},setpts=PTS-STARTPTS[v1_cut];"
+            f"[{ground_vid_input_idx}:v]trim=0:{ground_dur:.2f},setpts=PTS-STARTPTS[v2_cut];"
             f"[v1_cut][v2_cut]concat=n=2:v=1:a=0[v_seq]"
         )
         base_v_in = "[v_seq]"
@@ -458,7 +457,50 @@ def render_news_video(
         ground_dur = 0.0
         target_duration = audio_duration
 
-    current_input_start = 3 if has_outro_aud else 2
+    # Build FFmpeg command inputs
+    input_args = []
+    if video_duration > 0 and video_duration < target_duration:
+        input_args.extend(["-stream_loop", "-1"])
+    input_args.extend(["-i", video_input_path])  # Input 0: video footage (intro)
+
+    if has_audio_stream(audio_input_path):
+        input_args.extend(["-i", audio_input_path])  # Input 1: intro voice
+    else:
+        input_args.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
+
+    if has_outro_aud:
+        input_args.extend(["-i", outro_audio_path])  # Input 2: outro voice
+        next_in_idx = 3
+    else:
+        next_in_idx = 2
+
+    # Dedicated inputs for restarted footage (Zero-memory buffering!)
+    ground_vid_in_idx = 0
+    outro_vid_in_idx = 0
+
+    if audio_mix_mode == "intro_then_ground":
+        if restart_footage:
+            ground_vid_in_idx = next_in_idx
+            next_in_idx += 1
+            if video_duration > 0 and video_duration < target_duration:
+                input_args.extend(["-stream_loop", "-1"])
+            input_args.extend(["-i", video_input_path])
+
+    elif audio_mix_mode == "intro_then_ground_outro":
+        if restart_footage:
+            ground_vid_in_idx = next_in_idx
+            next_in_idx += 1
+            if video_duration > 0 and video_duration < target_duration:
+                input_args.extend(["-stream_loop", "-1"])
+            input_args.extend(["-i", video_input_path])
+        if restart_outro_footage:
+            outro_vid_in_idx = next_in_idx
+            next_in_idx += 1
+            if video_duration > 0 and video_duration < target_duration:
+                input_args.extend(["-stream_loop", "-1"])
+            input_args.extend(["-i", video_input_path])
+
+    current_input_start = next_in_idx
 
     extra_inputs, filter_complex, final_video_stream = build_video_filter_graph(
         target_w=target_w,
@@ -486,22 +528,10 @@ def render_news_video(
         current_input_start=current_input_start,
         restart_outro_footage=restart_outro_footage,
         ground_duration=ground_dur,
-        outro_duration=outro_dur
+        outro_duration=outro_dur,
+        ground_vid_input_idx=ground_vid_in_idx,
+        outro_vid_input_idx=outro_vid_in_idx
     )
-
-    # Build FFmpeg command inputs
-    input_args = []
-    if video_duration > 0 and video_duration < target_duration:
-        input_args.extend(["-stream_loop", "-1"])
-    input_args.extend(["-i", video_input_path])
-
-    if has_audio_stream(audio_input_path):
-        input_args.extend(["-i", audio_input_path])
-    else:
-        input_args.extend(["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"])
-
-    if has_outro_aud:
-        input_args.extend(["-i", outro_audio_path])
 
     input_args.extend(extra_inputs)
 
@@ -529,10 +559,9 @@ def render_news_video(
     elif audio_mix_mode == "intro_then_ground_outro" and has_outro_aud:
         if restart_footage and restart_outro_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
-                f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a_raw3]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[0:a]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[{ground_vid_in_idx}:a]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[{outro_vid_in_idx}:a]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
                 f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
@@ -541,10 +570,9 @@ def render_news_video(
             )
         elif restart_footage and not restart_outro_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
-                f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a_raw3]atrim={ground_dur:.2f}:{ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[0:a]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[{ground_vid_in_idx}:a]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[{ground_vid_in_idx}:a]atrim={ground_dur:.2f}:{ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
                 f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
@@ -553,10 +581,9 @@ def render_news_video(
             )
         elif not restart_footage and restart_outro_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
-                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a_raw3]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
+                f"[0:a]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
+                f"[0:a]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
+                f"[{outro_vid_in_idx}:a]atrim=0:{outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
                 f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
@@ -565,11 +592,7 @@ def render_news_video(
             )
         else:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=3[a_raw1][a_raw2][a_raw3];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1_cut];"
-                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2_cut];"
-                f"[a_raw3]atrim={audio_duration + ground_dur:.2f}:{audio_duration + ground_dur + outro_dur:.2f},asetpts=PTS-STARTPTS,volume={outro_vol:.2f}[a3_cut];"
-                f"[a1_cut][a2_cut][a3_cut]concat=n=3:v=0:a=1[footage_stream];"
+                f"[0:a]volume='if(between(t,{audio_duration:.2f},{audio_duration + ground_dur:.2f}),1.0,{intro_vol:.2f})':eval=frame[footage_stream];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={audio_duration + ground_dur:.2f}[a_in_pad];"
                 f"[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
                 f"[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
@@ -578,19 +601,15 @@ def render_news_video(
     elif audio_mix_mode == "intro_then_ground":
         if restart_footage:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1t];"
-                f"[a_raw2]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2t];"
+                f"[0:a]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1t];"
+                f"[{ground_vid_in_idx}:a]atrim=0:{ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2t];"
                 f"[a1t][a2t]concat=n=2:v=0:a=1[a_ground_seq];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={target_duration:.2f}[a_vca];"
                 f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
         else:
             audio_filters.append(
-                f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[a_raw1][a_raw2];"
-                f"[a_raw1]atrim=0:{audio_duration:.2f},asetpts=PTS-STARTPTS,volume={intro_vol:.2f}[a1t];"
-                f"[a_raw2]atrim={audio_duration:.2f}:{audio_duration + ground_dur:.2f},asetpts=PTS-STARTPTS,volume=1.0[a2t];"
-                f"[a1t][a2t]concat=n=2:v=0:a=1[a_ground_seq];"
+                f"[0:a]volume='if(lt(t,{audio_duration:.2f}),{intro_vol:.2f},1.0)':eval=frame[a_ground_seq];"
                 f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={target_duration:.2f}[a_vca];"
                 f"[a_vca][a_ground_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]"
             )
