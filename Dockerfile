@@ -8,7 +8,7 @@ ENV RENDER=true
 ENV LOW_MEMORY_MODE=true
 
 # Install FFmpeg, Chromium for Web UI HTML overlay rendering, and Hindi fonts
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y \
     ffmpeg \
     chromium \
     fonts-deva \

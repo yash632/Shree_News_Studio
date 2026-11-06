@@ -44,11 +44,12 @@ def find_chrome_binary():
     candidates = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        "/usr/bin/google-chrome",
-        "/usr/bin/chromium-browser",
         "/usr/bin/chromium",
-        "google-chrome",
-        "chromium"
+        "/usr/bin/chromium-browser",
+        "/usr/bin/google-chrome",
+        "chromium",
+        "chromium-browser",
+        "google-chrome"
     ]
     for c in candidates:
         if os.path.exists(c):
@@ -401,11 +402,14 @@ if (document.fonts && document.fonts.ready) {{
         file_url = Path(temp_html_path).resolve().as_uri()
         abs_out = os.path.abspath(output_path)
         chrome_profile = tempfile.mkdtemp(prefix="news_overlay_chrome_")
+
         cmd = [
             chrome_bin,
             '--headless=new',
             '--disable-gpu',
             '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-web-security',
             '--hide-scrollbars',
             '--allow-file-access-from-files',
             '--disable-dev-shm-usage',
@@ -418,24 +422,27 @@ if (document.fonts && document.fonts.ready) {{
             '--no-default-browser-check',
             '--default-background-color=00000000',
             '--virtual-time-budget=2000',
-            f'--screenshot={abs_out}',
             f'--window-size={canvas_width},{canvas_height}',
+            f'--screenshot={abs_out}',
             file_url
         ]
-        if sys.platform.startswith("linux"):
-            cmd.extend(['--single-process', '--no-zygote'])
 
         try:
+            print(f"[RenderHtmlOverlay] Running Chrome: {chrome_bin}")
             res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if (res.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 10000):
+                print(f"[RenderHtmlOverlay] First attempt returned {res.returncode}. Retrying with --headless...")
+                cmd[1] = '--headless'
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         finally:
             shutil.rmtree(chrome_profile, ignore_errors=True)
             gc.collect()
+
         if res.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 10000:
-            # Keep the browser's z-index layering intact. Layout elements above
-            # the footage window must remain visible in the exported composite.
+            print(f"[RenderHtmlOverlay] Successfully rendered Web UI HTML overlay! Size: {os.path.getsize(output_path)} bytes")
             return True
         else:
-            print("Chrome headless overlay render error:", res.stderr)
+            print(f"[RenderHtmlOverlay] Chrome headless overlay render error (code {res.returncode}):\nStdout: {res.stdout}\nStderr: {res.stderr}")
             return False
     except Exception as e:
         print("HTML overlay rendering failed:", e)
