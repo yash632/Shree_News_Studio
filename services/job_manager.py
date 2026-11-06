@@ -1,5 +1,6 @@
 import os
 import time
+import json
 import threading
 import uuid
 from typing import Dict, Any, Optional
@@ -16,24 +17,67 @@ class JobManager:
     def set_progress_emitter(self, emitter):
         self.progress_emitter = emitter
 
+    def _save_job_to_disk(self, job_data: dict):
+        try:
+            job_id = job_data.get("id")
+            if not job_id:
+                return
+            os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+            path = os.path.join(UPLOAD_FOLDER, f"job_{job_id}.json")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(job_data, f)
+        except Exception:
+            pass
+
+    def _load_job_from_disk(self, job_id: str) -> Optional[dict]:
+        try:
+            path = os.path.join(UPLOAD_FOLDER, f"job_{job_id}.json")
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            # Check if output video already finished rendering
+            out_file = os.path.join(OUTPUT_FOLDER, f"news_{job_id}.mp4")
+            if os.path.exists(out_file) and os.path.getsize(out_file) > 1024:
+                return {
+                    "id": job_id,
+                    "status": "completed",
+                    "progress": 100,
+                    "message": "Your professional news video is ready!",
+                    "output_video": f"news_{job_id}.mp4",
+                    "error": None
+                }
+        except Exception:
+            pass
+        return None
+
     def create_job(self) -> str:
         job_id = str(uuid.uuid4())[:8]
+        job_data = {
+            "id": job_id,
+            "status": "queued",
+            "progress": 0,
+            "message": "Queued for processing...",
+            "created_at": time.time(),
+            "output_video": f"news_{job_id}.mp4",
+            "error": None
+        }
         with self.lock:
-            self.jobs[job_id] = {
-                "id": job_id,
-                "status": "queued",
-                "progress": 0,
-                "message": "Queued for processing...",
-                "created_at": time.time(),
-                "output_video": f"news_{job_id}.mp4",
-                "error": None
-            }
+            self.jobs[job_id] = job_data
+        self._save_job_to_disk(job_data)
         return job_id
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         with self.lock:
             job = self.jobs.get(job_id)
-            return dict(job) if job else None
+            if job:
+                return dict(job)
+        # Fallback to persistent state on disk (survives Gunicorn worker recycling)
+        disk_job = self._load_job_from_disk(job_id)
+        if disk_job:
+            with self.lock:
+                self.jobs[job_id] = disk_job
+            return dict(disk_job)
+        return None
 
     def update_progress(self, job_id: str, progress: int, message: str):
         job_snapshot = None
@@ -52,11 +96,13 @@ class JobManager:
                     self.jobs[job_id]["message"] = message
                 job_snapshot = dict(self.jobs[job_id])
 
-        if job_snapshot and self.progress_emitter:
-            try:
-                self.progress_emitter(job_id, job_snapshot)
-            except Exception as e:
-                print(f"[SocketIO] Error emitting progress for {job_id}: {e}")
+        if job_snapshot:
+            self._save_job_to_disk(job_snapshot)
+            if self.progress_emitter:
+                try:
+                    self.progress_emitter(job_id, job_snapshot)
+                except Exception as e:
+                    print(f"[SocketIO] Error emitting progress for {job_id}: {e}")
 
     def process_job_async(
         self,

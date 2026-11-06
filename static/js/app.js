@@ -1606,6 +1606,7 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('join_job', { job_id: jobId });
         }
 
+        let consecutive404s = 0;
         // 2. Safety Fallback: only polls if socket hasn't delivered updates within 3.5s
         // (Ensures zero bugs even if client network/firewall drops WebSockets)
         fallbackInterval = setInterval(async () => {
@@ -1613,9 +1614,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearInterval(fallbackInterval);
                 return;
             }
-            if (Date.now() - lastUpdateTime > 5000) {
+            if (Date.now() - lastUpdateTime > 4000) {
                 try {
                     const resp = await fetch(`/api/status/${jobId}`);
+                    if (resp.status === 404) {
+                        consecutive404s++;
+                        if (consecutive404s >= 4) {
+                            cleanup();
+                            isCompleted = true;
+                            progressStatus.innerHTML = `<span style="color: #ff6b6b; font-weight: 600;">⚠️ Server session lost. Please click "GENERATE NEWS VIDEO" to submit again.</span>`;
+                            progressFill.style.backgroundColor = 'var(--accent-red)';
+                            progressPercent.textContent = 'Failed';
+                            resetGenerateBtn();
+                            showToast("Server session lost. Please click generate again.", true);
+                            return;
+                        }
+                    } else {
+                        consecutive404s = 0;
+                    }
                     const data = await resp.json();
                     if (data && data.success && data.job) {
                         handleProgress(data.job);

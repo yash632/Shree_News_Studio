@@ -4,6 +4,8 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5000
+ENV RENDER=true
+ENV LOW_MEMORY_MODE=true
 
 # Install FFmpeg and essential fonts for text rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,5 +29,5 @@ RUN mkdir -p uploads outputs fonts
 
 EXPOSE 5000
 
-# Run with Gunicorn (1 worker, 4 threads for ultra-low memory under 512MB RAM)
-CMD exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 180 app:app
+# Run with Gunicorn (1 worker, 4 threads for ultra-low memory under 512MB RAM, 10-min timeout for long renders)
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 600 app:app

@@ -241,15 +241,41 @@ def is_low_memory_environment() -> bool:
     On local machines (e.g. user's 16GB laptop), returns False so full 1080p,
     maximum CPU threads, and best quality settings are used.
     """
+    # 1. Render platform flags
     if os.environ.get("RENDER") == "true" or "RENDER_SERVICE_ID" in os.environ or "RENDER_INSTANCE_ID" in os.environ:
         return True
 
+    # 2. Render port signature (Render assigns PORT=10000 to all hosted web services)
+    if os.environ.get("PORT") == "10000":
+        return True
+
+    # 3. Explicit override
     env_override = os.environ.get("LOW_MEMORY_MODE", "").lower()
     if env_override in ("true", "1", "yes"):
         return True
     if env_override in ("false", "0", "no"):
         return False
 
+    # 4. Linux cgroup memory limit check (detects Docker container limits like 512MB)
+    if os.path.exists("/sys/fs/cgroup/memory.max"):
+        try:
+            with open("/sys/fs/cgroup/memory.max", "r") as f:
+                val = f.read().strip()
+                if val != "max" and int(val) < 1500 * 1024 * 1024:
+                    return True
+        except Exception:
+            pass
+
+    if os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                val = f.read().strip()
+                if int(val) < 1500 * 1024 * 1024:
+                    return True
+        except Exception:
+            pass
+
+    # 5. /proc/meminfo
     if os.path.exists("/proc/meminfo"):
         try:
             with open("/proc/meminfo", "r") as f:
@@ -261,6 +287,7 @@ def is_low_memory_environment() -> bool:
         except Exception:
             pass
 
+    # 6. psutil
     try:
         import psutil
         total_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
