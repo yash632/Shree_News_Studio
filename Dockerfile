@@ -1,37 +1,31 @@
 FROM python:3.10-slim
 
-# Avoid interactive prompts during apt install
-ENV DEBIAN_FRONTEND=noninteractive \
-    PYTHONUNBUFFERED=1 \
-    PORT=7860
+# Prevent Python from writing .pyc files and enable unbuffered output
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=5000
 
-# Install FFmpeg, Chromium for HTML overlay rendering, and Hindi fonts
+# Install FFmpeg and essential fonts for text rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    fonts-deva \
+    fonts-dejavu-core \
     fonts-noto-core \
-    chromium \
-    curl \
+    fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user (required by Hugging Face Spaces)
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user \
-    PATH=/home/user/.local/bin:$PATH
+WORKDIR /app
 
-WORKDIR $HOME/app
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy requirements and install
-COPY --chown=user requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+# Copy application files
+COPY . .
 
-# Copy project files
-COPY --chown=user . .
+# Ensure upload/output directories exist
+RUN mkdir -p uploads outputs fonts
 
-# Ensure upload and output directories exist
-RUN mkdir -p uploads outputs
+EXPOSE 5000
 
-EXPOSE 7860
-
-CMD ["python", "app.py"]
+# Run with Gunicorn (1 worker, 4 threads for ultra-low memory under 512MB RAM)
+CMD exec gunicorn --bind 0.0.0.0:${PORT:-5000} --workers 1 --threads 4 --timeout 180 app:app

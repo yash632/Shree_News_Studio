@@ -1,4 +1,0 @@
-ffmpeg
-fonts-deva
-fonts-noto-core
-

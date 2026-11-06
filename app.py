@@ -1,5 +1,4 @@
 import os
-import shutil
 import uuid
 import time
 import datetime
@@ -22,24 +21,8 @@ from services.job_manager import job_manager
 from services.tts_service import generate_tts_audio
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
+CORS(app)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
-
-@app.after_request
-def add_cors_headers(response):
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Range'
-    response.headers['Access-Control-Expose-Headers'] = 'Content-Range, Accept-Ranges, Content-Length'
-    return response
-
-@app.route('/api/<path:subpath>', methods=['OPTIONS'])
-def handle_options_preflight(subpath):
-    response = jsonify({'status': 'ok'})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Range'
-    return response
 
 def emit_job_progress(job_id: str, job_data: dict):
     """
@@ -97,10 +80,6 @@ def is_allowed_file(filename: str, extensions: set) -> bool:
 def favicon():
     return send_from_directory('static', 'favicon.png', mimetype='image/png')
 
-@app.route('/logo.png')
-def root_logo():
-    return send_from_directory('static', 'logo.png', mimetype='image/png')
-
 @app.route('/portrait-template')
 def portrait_template():
     return send_from_directory('frontend', 'bhopal-news-bulletin.html')
@@ -110,9 +89,6 @@ def strip_thumbnails(img_name):
     return send_from_directory('static/assets', f'{img_name}.jpg')
 
 @app.route('/')
-@app.route('/studio')
-@app.route('/flask')
-@app.route('/flask/')
 def index():
     return render_template(
         'index.html',
@@ -121,21 +97,15 @@ def index():
         default_logo='/static/favicon.png' if DEFAULT_LOGO else None
     )
 
-@app.route('/voices', methods=['GET'])
 @app.route('/api/voices', methods=['GET'])
-@app.route('/backend_api/voices', methods=['GET'])
 def get_voices():
     return jsonify({"success": True, "voices": NEWS_VOICES})
 
-@app.route('/themes', methods=['GET'])
 @app.route('/api/themes', methods=['GET'])
-@app.route('/backend_api/themes', methods=['GET'])
 def get_themes():
     return jsonify({"success": True, "themes": NEWS_THEMES})
 
-@app.route('/preview-voice', methods=['POST'])
 @app.route('/api/preview-voice', methods=['POST'])
-@app.route('/backend_api/preview-voice', methods=['POST'])
 def preview_voice():
     """Generates a fast, low-latency audio preview of the selected voice."""
     data = request.get_json(silent=True) or {}
@@ -165,53 +135,24 @@ def preview_voice():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
-@app.route('/upload-media', methods=['POST'])
-@app.route('/api/upload-media', methods=['POST'])
-@app.route('/backend_api/upload-media', methods=['POST'])
-def upload_media():
-    """Background pre-upload endpoint so video is already on server while user types text."""
-    if 'video' not in request.files:
-        return jsonify({"success": False, "error": "No media file provided."}), 400
-    video_file = request.files['video']
-    if not video_file or video_file.filename == '':
-        return jsonify({"success": False, "error": "Empty file."}), 400
-    if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
-        return jsonify({"success": False, "error": "Invalid video format."}), 400
-
-    ext = os.path.splitext(video_file.filename)[1].lower() or '.mp4'
-    media_id = f"pre_{uuid.uuid4().hex[:12]}{ext}"
-    media_path = os.path.join(UPLOAD_FOLDER, media_id)
-    video_file.save(media_path)
-    return jsonify({
-        "success": True,
-        "media_id": media_id,
-        "filename": video_file.filename,
-        "size": os.path.getsize(media_path)
-    })
-
-@app.route('/generate', methods=['POST'])
 @app.route('/api/generate', methods=['POST'])
-@app.route('/backend_api/generate', methods=['POST'])
 def generate_video():
     """Handles video generation job submission."""
-    # 1. Video file validation (pre-uploaded or direct upload)
-    video_media_id = request.form.get('video_media_id', '').strip()
-    job_id = job_manager.create_job()
-
-    if video_media_id and os.path.exists(os.path.join(UPLOAD_FOLDER, secure_filename(video_media_id))):
-        existing_path = os.path.join(UPLOAD_FOLDER, secure_filename(video_media_id))
-        video_ext = os.path.splitext(existing_path)[1].lower()
-        video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
-        shutil.copy2(existing_path, video_path)
-    elif 'video' in request.files and request.files['video'].filename != '':
-        video_file = request.files['video']
-        if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
-            return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
-        video_ext = os.path.splitext(video_file.filename)[1].lower()
-        video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
-        video_file.save(video_path)
-    else:
+    # 1. Video file validation
+    if 'video' not in request.files:
         return jsonify({"success": False, "error": "Background video footage is required."}), 400
+    
+    video_file = request.files['video']
+    if not video_file or video_file.filename == '':
+        return jsonify({"success": False, "error": "No video footage selected."}), 400
+    
+    if not is_allowed_file(video_file.filename, ALLOWED_VIDEO_EXTS):
+        return jsonify({"success": False, "error": "Invalid video format. Supported: MP4, MOV, MKV, WEBM."}), 400
+
+    job_id = job_manager.create_job()
+    video_ext = os.path.splitext(video_file.filename)[1].lower()
+    video_path = os.path.join(UPLOAD_FOLDER, f"{job_id}_video{video_ext}")
+    video_file.save(video_path)
 
     # 2. Audio selection (TTS vs Direct Upload)
     audio_mode = request.form.get('audio_mode', 'tts')
@@ -363,9 +304,7 @@ def generate_video():
         "message": "Video rendering started."
     })
 
-@app.route('/status/<job_id>', methods=['GET'])
 @app.route('/api/status/<job_id>', methods=['GET'])
-@app.route('/backend_api/status/<job_id>', methods=['GET'])
 def job_status(job_id):
     """Returns the live status of the generation job."""
     status = job_manager.get_job_status(job_id)
@@ -378,9 +317,7 @@ def serve_output(filename):
     """Serves rendered video or audio files."""
     return send_from_directory(OUTPUT_FOLDER, filename)
 
-@app.route('/generate-script-stream', methods=['POST'])
 @app.route('/api/generate-script-stream', methods=['POST'])
-@app.route('/backend_api/generate-script-stream', methods=['POST'])
 def generate_script_stream():
     """Generates an authentic Hindi news anchor script using LangChain with streaming enabled."""
     data = request.get_json() or {}
@@ -580,60 +517,6 @@ from services.cleaner import start_cleanup_daemon
 start_cleanup_daemon(interval_seconds=180)
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 7860))
-    debug_mode = os.environ.get('FLASK_DEBUG', 'false').lower() in ('true', '1')
-
-    # If running in Hugging Face Spaces (ZeroGPU environment)
-    if os.environ.get('SPACE_ID') or os.environ.get('GRADIO_SERVER_PORT'):
-        import gradio as gr
-        from a2wsgi import WSGIMiddleware
-        from starlette.staticfiles import StaticFiles
-        from fastapi.middleware.cors import CORSMiddleware
-
-        # 1. ZeroGPU Anchor Function (Required by Hugging Face ZeroGPU startup scanner)
-        try:
-            import spaces
-            @spaces.GPU
-            def zero_gpu_anchor(val=""):
-                return f"ZeroGPU Active {val}"
-        except Exception:
-            def zero_gpu_anchor(val=""):
-                return f"Active {val}"
-
-        with gr.Blocks(title="Shree News Studio Backend") as demo:
-            gr.Markdown("## 📺 Shree News Studio Backend Engine")
-            gr.Markdown("Status: **Active** | Runtime: **Hugging Face ZeroGPU**")
-            _in = gr.Textbox(value="1", visible=False)
-            _out = gr.Textbox(visible=False)
-            _b = gr.Button("Init", visible=False)
-            _b.click(fn=zero_gpu_anchor, inputs=_in, outputs=_out)
-
-        # 2. Add FastAPI CORS middleware for cross-origin access from Render frontend
-        demo.app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-            expose_headers=["*"]
-        )
-
-        # 3. Mount Flask on /backend_api (bypasses Gradio's internal /api collision completely)
-        flask_asgi = WSGIMiddleware(app)
-        demo.app.mount("/backend_api", flask_asgi)
-
-        # 4. Mount outputs so rendered videos stream directly to Render frontend
-        if not os.path.exists("outputs"):
-            os.makedirs("outputs", exist_ok=True)
-        demo.app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
-
-        print(f"Starting ZeroGPU Backend on Hugging Face Spaces (Port {port})...")
-        demo.launch(
-            server_name="0.0.0.0",
-            server_port=port,
-            show_error=True,
-            strict_cors=False
-        )
-    else:
-        print(f"Starting Shree News Studio server on http://0.0.0.0:{port}")
-        socketio.run(app, host='0.0.0.0', port=port, debug=debug_mode, allow_unsafe_werkzeug=True)
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Starting News Creation Studio with WebSockets on http://localhost:{port}")
+    socketio.run(app, host='0.0.0.0', port=port, debug=True, allow_unsafe_werkzeug=True)

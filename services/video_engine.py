@@ -516,15 +516,13 @@ def render_news_video(
         "-map", final_video_stream,
         "-map", "[aout]",
         "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-threads", "2",
-        "-crf", "24",
+        "-preset", "veryfast",
+        "-crf", "23",
         "-c:a", "aac",
         "-b:a", "192k",
         "-pix_fmt", "yuv420p",
         "-t", str(target_duration),
         "-movflags", "+faststart",
-        "-progress", "pipe:1",
         output_video_path
     ]
 
@@ -532,7 +530,6 @@ def render_news_video(
         progress_callback(55, "Rendering broadcast video...")
 
     try:
-        import threading
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -541,41 +538,7 @@ def render_news_video(
             encoding="utf-8",
             errors="replace"
         )
-
-        stderr_lines = []
-        def drain_stderr():
-            try:
-                for s_line in process.stderr:
-                    stderr_lines.append(s_line)
-                    if len(stderr_lines) > 60:
-                        stderr_lines.pop(0)
-            except Exception:
-                pass
-
-        t_err = threading.Thread(target=drain_stderr, daemon=True)
-        t_err.start()
-
-        last_progress_pct = 55
-        if process.stdout:
-            for line in process.stdout:
-                line = line.strip()
-                if line.startswith("out_time_us="):
-                    try:
-                        time_us = int(line.split("=")[1])
-                        curr_sec = time_us / 1_000_000.0
-                        if target_duration > 0:
-                            pct = int(55 + min(39, (curr_sec / target_duration) * 39))
-                            if pct > last_progress_pct and progress_callback:
-                                last_progress_pct = pct
-                                progress_callback(pct, f"Rendering broadcast video ({int(curr_sec)}s / {int(target_duration)}s)...")
-                    except Exception:
-                        pass
-                elif line.startswith("progress=end"):
-                    break
-
-        process.wait()
-        t_err.join(timeout=2.0)
-        stderr_output = "".join(stderr_lines)
+        _, stderr_output = process.communicate()
 
         if process.returncode != 0:
             print(f"FFmpeg failed with code {process.returncode}:\n{stderr_output}")

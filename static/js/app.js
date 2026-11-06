@@ -1,40 +1,3 @@
-// ============================================================
-// Multi-Server Backend Configuration (Render UI <-> Hugging Face Backend)
-// ============================================================
-function getBackendUrl() {
-    if (window.BACKEND_URL && window.BACKEND_URL.trim()) {
-        return window.BACKEND_URL.trim().replace(/\/+$/, '');
-    }
-    const saved = localStorage.getItem('shree_backend_url');
-    if (saved && saved.trim()) {
-        return saved.trim().replace(/\/+$/, '');
-    }
-    return ''; // Same origin: Render hosts full stack directly
-}
-
-function setBackendUrl(url) {
-    if (!url || !url.trim()) {
-        localStorage.removeItem('shree_backend_url');
-    } else {
-        localStorage.setItem('shree_backend_url', url.trim().replace(/\/+$/, ''));
-    }
-    window.location.reload();
-}
-
-function apiUrl(path) {
-    if (!path) return '';
-    if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    const base = getBackendUrl();
-    let cleanPath = path.startsWith('/') ? path : '/' + path;
-
-    // When communicating with Hugging Face Space backend, route to /backend_api to bypass Gradio's reserved /api route
-    if (base && base.includes('hf.space')) {
-        cleanPath = cleanPath.replace(/^\/api\//, '/backend_api/');
-    }
-
-    return base ? (base + cleanPath) : cleanPath;
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     // Form & Button
     const form = document.getElementById('newsForm');
@@ -58,30 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoInput = document.getElementById('logoInput');
     const logoUploadBox = document.getElementById('logoUploadBox');
     const logoPreviewImg = document.getElementById('logoPreviewImg');
-
-    // Backend Server Switcher Pill
-    const backendServerPill = document.getElementById('backendServerPill');
-    const backendStatusText = document.getElementById('backendStatusText');
-    const currentBackend = getBackendUrl();
-    if (backendStatusText) {
-        if (currentBackend) {
-            backendStatusText.textContent = `Backend: ${currentBackend.replace(/^https?:\/\//, '')}`;
-        } else {
-            backendStatusText.textContent = `Backend: Same-Domain`;
-        }
-    }
-    if (backendServerPill) {
-        backendServerPill.addEventListener('click', () => {
-            const current = getBackendUrl() || 'https://yash632-shree-news-studio.hf.space';
-            const entered = prompt(
-                "Backend Processing Server URL:\n\n• For Hugging Face: https://yash632-shree-news-studio.hf.space\n• For Render or Local: Leave empty for same domain\n",
-                current
-            );
-            if (entered !== null) {
-                setBackendUrl(entered.trim());
-            }
-        });
-    }
 
     // Audio Controls
     const tabModeTts = document.getElementById('tabModeTts');
@@ -166,9 +105,6 @@ document.addEventListener('DOMContentLoaded', () => {
         audioModeInput.value = 'tts';
         ttsSection.style.display = 'block';
         uploadSection.style.display = 'none';
-        if (audioInput) audioInput.value = '';
-        if (audioDropContent) audioDropContent.style.display = 'block';
-        if (audioSelected) audioSelected.style.display = 'none';
     });
 
     tabModeUpload.addEventListener('click', () => {
@@ -436,7 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 const introText = rawScriptText;
                 const sampleText = introText.length > 300 ? introText.slice(0, 300) : introText;
-                const resp = await fetch(apiUrl('/api/preview-voice'), {
+                const resp = await fetch('/api/preview-voice', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voice_id: voiceId, text: sampleText, speed: ttsSpeed })
@@ -447,20 +383,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     updatePreviewBtnState(false);
                     return;
                 }
-                introAudioUrl = apiUrl(resData.audio_url);
+                introAudioUrl = resData.audio_url;
             }
 
             if (mode === 'intro_then_ground_outro') {
                 const outroText = (outroTextInput?.value || '').trim() || "विशेष बुलेटिन में फिलहाल इतना ही, देश-दुनिया की बाकी खबरों के लिए देखते रहिए श्री NEWS 24x7...";
                 const sampleOutro = outroText.length > 300 ? outroText.slice(0, 300) : outroText;
-                const resp2 = await fetch(apiUrl('/api/preview-voice'), {
+                const resp2 = await fetch('/api/preview-voice', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ voice_id: voiceId, text: sampleOutro, speed: ttsSpeed })
                 });
                 const resData2 = await resp2.json();
                 if (resData2.success && resData2.audio_url) {
-                    outroAudioUrl = apiUrl(resData2.audio_url);
+                    outroAudioUrl = resData2.audio_url;
                 }
             }
 
@@ -816,100 +752,11 @@ document.addEventListener('DOMContentLoaded', () => {
         portraitReferencePreview.addEventListener('load', syncPortraitPreview);
     }
 
-    // ============================================================
-    // Background Pre-Upload Engine (Instant 0-Second Upload Jugaad)
-    // ============================================================
-    let preUploadedVideoId = null;
-    let preUploadXhr = null;
-    let preUploadPercent = 0;
-    let preUploadPromise = null;
-
-    function startBackgroundPreUpload(file) {
-        if (!file) return;
-        if (preUploadXhr) {
-            preUploadXhr.abort();
-            preUploadXhr = null;
-        }
-        preUploadedVideoId = null;
-        preUploadPercent = 0;
-
-        const fd = new FormData();
-        fd.append('video', file);
-
-        let uploadBadge = document.getElementById('preUploadBadge');
-        if (!uploadBadge) {
-            uploadBadge = document.createElement('span');
-            uploadBadge.id = 'preUploadBadge';
-            uploadBadge.style.cssText = 'margin-left: 8px; font-size: 11px; padding: 3px 9px; border-radius: 12px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.3);';
-            if (videoFileName && videoFileName.parentNode) {
-                videoFileName.parentNode.appendChild(uploadBadge);
-            }
-        }
-        uploadBadge.textContent = '⚡ Cloud Pre-upload: 0%';
-
-        preUploadPromise = new Promise((resolve) => {
-            const xhr = new XMLHttpRequest();
-            preUploadXhr = xhr;
-            xhr.open('POST', apiUrl('/api/upload-media'), true);
-
-            xhr.upload.onprogress = (e) => {
-                if (e.lengthComputable && e.total > 0) {
-                    preUploadPercent = Math.round((e.loaded / e.total) * 100);
-                    const b = document.getElementById('preUploadBadge');
-                    if (b) {
-                        b.textContent = `⚡ Cloud Pre-upload: ${preUploadPercent}%`;
-                    }
-                    const genProgress = document.getElementById('progressStatus');
-                    const genPercent = document.getElementById('progressPercent');
-                    const genFill = document.getElementById('progressFill');
-                    if (genProgress && genProgress.dataset.waitingOnPreupload === 'true') {
-                        const mbUp = (e.loaded / (1024 * 1024)).toFixed(1);
-                        const mbTot = (e.total / (1024 * 1024)).toFixed(1);
-                        const pVal = Math.round(preUploadPercent * 0.4);
-                        if (genPercent) genPercent.textContent = `${pVal}%`;
-                        if (genFill) genFill.style.width = `${pVal}%`;
-                        genProgress.textContent = `Uploading video footage: ${mbUp}MB / ${mbTot}MB (${preUploadPercent}%)...`;
-                    }
-                }
-            };
-
-            xhr.onload = () => {
-                preUploadXhr = null;
-                if (xhr.status === 200) {
-                    try {
-                        const data = JSON.parse(xhr.responseText);
-                        if (data.success && data.media_id) {
-                            preUploadedVideoId = data.media_id;
-                            const b = document.getElementById('preUploadBadge');
-                            if (b) {
-                                b.style.background = 'rgba(34, 197, 94, 0.18)';
-                                b.style.color = '#22c55e';
-                                b.style.borderColor = 'rgba(34, 197, 94, 0.4)';
-                                b.textContent = '✓ 100% Cloud Ready (0s Upload)';
-                            }
-                            resolve(data.media_id);
-                            return;
-                        }
-                    } catch (e) {}
-                }
-                resolve(null);
-            };
-
-            xhr.onerror = () => {
-                preUploadXhr = null;
-                resolve(null);
-            };
-
-            xhr.send(fd);
-        });
-    }
-
     // Handle user video selection
     videoInput.addEventListener('change', () => {
         stopTimelinePreview();
         if (videoInput.files.length > 0) {
             const file = videoInput.files[0];
-            startBackgroundPreUpload(file);
             const videoUrl = URL.createObjectURL(file);
             portraitVideoUrl = videoUrl;
             if (previewFootageVideo) {
@@ -943,13 +790,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearVideoBtn.addEventListener('click', () => {
         stopTimelinePreview();
-        preUploadedVideoId = null;
-        if (preUploadXhr) {
-            preUploadXhr.abort();
-            preUploadXhr = null;
-        }
-        const b = document.getElementById('preUploadBadge');
-        if (b) b.remove();
         if (groundDurationRange) {
             groundDurationRange.max = 300;
             if (groundDurationHint) {
@@ -1482,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previewVoiceBtn.innerHTML = `<span>Loading...</span>`;
 
         try {
-            const resp = await fetch(apiUrl('/api/preview-voice'), {
+            const resp = await fetch('/api/preview-voice', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1493,7 +1333,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await resp.json();
             if (data.success && data.audio_url) {
-                voicePreviewAudio.src = apiUrl(data.audio_url) + '?t=' + Date.now();
+                voicePreviewAudio.src = data.audio_url + '?t=' + Date.now();
                 voicePreviewAudio.load();
                 voicePreviewAudio.play();
                 showToast(`Playing voice preview at ${currentSpeed.toFixed(2)}x speed...`);
@@ -1539,47 +1379,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        generateBtn.disabled = true;
-        generateBtn.innerHTML = `<span class="btn-icon">⏳</span><span>SUBMITTING JOB...</span>`;
-        progressSection.style.display = 'block';
-        resultActions.style.display = 'none';
-
-        // Check if pre-upload is still running (e.g. at 65%):
-        let finalMediaId = preUploadedVideoId;
-        if (!finalMediaId && preUploadPromise) {
-            progressStatus.dataset.waitingOnPreupload = 'true';
-            progressStatus.textContent = `Finishing cloud upload (${preUploadPercent}%)...`;
-            const pVal = Math.round(preUploadPercent * 0.4);
-            progressPercent.textContent = `${pVal}%`;
-            progressFill.style.width = `${pVal}%`;
-            finalMediaId = await preUploadPromise;
-            delete progressStatus.dataset.waitingOnPreupload;
-        }
-
         const formData = new FormData(form);
 
-        // Crucial: remove any heavy audio file if mode is TTS!
-        if (audioModeInput.value !== 'upload') {
-            formData.delete('audio');
-        }
-
-        // Remove empty logo file if default logo is used
-        if (!logoInput.files || logoInput.files.length === 0) {
-            formData.delete('logo');
-        }
-
-        if (finalMediaId) {
-            formData.delete('video');
-            formData.append('video_media_id', finalMediaId);
-            progressPercent.textContent = '45%';
-            progressFill.style.width = '45%';
-            progressStatus.textContent = 'Footage ready on cloud (Instant 0s upload)! Initializing video render...';
-        } else {
-            progressPercent.textContent = '1%';
-            progressFill.style.width = '1%';
-            progressStatus.textContent = 'Uploading media assets to server...';
-        }
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = `<span class="btn-icon">⏳</span><span>SUBMITTING JOB...</span>`;
+        
+        progressSection.style.display = 'block';
+        progressPercent.textContent = '1%';
+        progressFill.style.width = '1%';
+        progressStatus.textContent = 'Uploading media assets to server...';
         progressFill.style.backgroundColor = 'var(--accent-red)';
+        resultActions.style.display = 'none';
 
         // Hide final player, show canvas preview
         finalVideoPlayer.style.display = 'none';
@@ -1589,22 +1399,17 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('canvas').style.display = 'block';
 
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', apiUrl('/api/generate'), true);
+        xhr.open('POST', '/api/generate', true);
 
-        const uploadStartTime = Date.now();
         // Upload progress listener
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable && event.total > 0) {
-                const uploadPercent = Math.round((event.loaded / event.total) * 100);
-                const overallPercent = Math.min(40, Math.round((event.loaded / event.total) * 40));
-                progressPercent.textContent = `${overallPercent}%`;
-                progressFill.style.width = `${overallPercent}%`;
+                const percent = Math.min(25, Math.round((event.loaded / event.total) * 25));
+                progressPercent.textContent = `${percent}%`;
+                progressFill.style.width = `${percent}%`;
                 const mbLoaded = (event.loaded / (1024 * 1024)).toFixed(1);
                 const mbTotal = (event.total / (1024 * 1024)).toFixed(1);
-                const elapsed = (Date.now() - uploadStartTime) / 1000;
-                const speed = elapsed > 0.5 ? ((event.loaded / (1024 * 1024)) / elapsed).toFixed(1) : '';
-                const speedTag = speed ? ` [${speed} MB/s]` : '';
-                progressStatus.textContent = `Uploading footage: ${mbLoaded}MB / ${mbTotal}MB (${uploadPercent}%)${speedTag}...`;
+                progressStatus.textContent = `Uploading video footage: ${mbLoaded}MB / ${mbTotal}MB (${percent}%)...`;
             }
         };
 
@@ -1618,22 +1423,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (xhr.status === 200 && data.success) {
-                    progressPercent.textContent = '45%';
-                    progressFill.style.width = '45%';
+                    progressPercent.textContent = '30%';
+                    progressFill.style.width = '30%';
                     progressStatus.textContent = 'Media uploaded! Initializing video render...';
                     watchJobProgress(data.job_id);
                 } else {
-                    let errDetail = data.error;
-                    if (errDetail && typeof errDetail === 'object') {
-                        errDetail = errDetail.message || errDetail.error || JSON.stringify(errDetail);
-                    }
-                    throw new Error(errDetail || `Server error (${xhr.status})`);
+                    throw new Error(data.error || `Server error (${xhr.status})`);
                 }
             } catch (err) {
-                let friendlyMsg = err.message || "Failed to submit video generation job. Please try again.";
-                if (friendlyMsg && typeof friendlyMsg === 'object') {
-                    friendlyMsg = friendlyMsg.message || friendlyMsg.error || JSON.stringify(friendlyMsg);
-                }
+                const friendlyMsg = err.message || "Failed to submit video generation job. Please try again.";
                 showToast(friendlyMsg, true);
                 resetGenerateBtn();
                 progressStatus.innerHTML = `<span style="color: #ff6b6b; font-weight: 600;">⚠️ ${friendlyMsg}</span>`;
@@ -1660,15 +1458,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let socket = null;
     try {
         if (typeof io !== 'undefined') {
-            const socketHost = getBackendUrl() || window.location.origin;
-            socket = io(socketHost, {
+            socket = io({
                 transports: ['websocket', 'polling'],
                 reconnection: true,
                 reconnectionAttempts: 15,
                 reconnectionDelay: 1000
             });
             socket.on('connect', () => {
-                console.log('[SocketIO] Connected to broadcast server:', socketHost, 'session id:', socket.id);
+                console.log('[SocketIO] Connected to broadcast server, session id:', socket.id);
             });
             socket.on('disconnect', (reason) => {
                 console.log('[SocketIO] Disconnected from server:', reason);
@@ -1705,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast("News Video Generated Successfully!");
 
                 const videoFileName = (job.output_video && job.output_video !== 'null' && job.output_video !== 'None') ? job.output_video : `news_${jobId}.mp4`;
-                const videoUrl = apiUrl(`/outputs/${videoFileName}`);
+                const videoUrl = `/outputs/${videoFileName}`;
                 const previewCanvasBg = document.getElementById('previewCanvasBg');
                 if (previewCanvasBg) previewCanvasBg.style.display = 'none';
                 finalVideoPlayer.src = videoUrl;
@@ -1722,10 +1519,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isCompleted = true;
                 cleanup();
 
-                let errorMsg = job.error || job.message || 'Video processing encountered an unexpected issue. Please check your footage and try again.';
-                if (errorMsg && typeof errorMsg === 'object') {
-                    errorMsg = errorMsg.message || errorMsg.error || JSON.stringify(errorMsg);
-                }
+                const errorMsg = job.error || job.message || 'Video processing encountered an unexpected issue. Please check your footage and try again.';
                 showToast(errorMsg, true);
                 progressStatus.innerHTML = `<span style="color: #ff6b6b; font-weight: 600;">⚠️ ${errorMsg}</span>`;
                 progressFill.style.backgroundColor = 'var(--accent-red)';
@@ -1760,24 +1554,25 @@ document.addEventListener('DOMContentLoaded', () => {
             socket.emit('join_job', { job_id: jobId });
         }
 
-        // 2. High-Reliability Progress Poller (works seamlessly across multi-server and WSGI mounts)
+        // 2. Safety Fallback: only polls if socket hasn't delivered updates within 3.5s
+        // (Ensures zero bugs even if client network/firewall drops WebSockets)
         fallbackInterval = setInterval(async () => {
             if (isCompleted) {
                 clearInterval(fallbackInterval);
                 return;
             }
-            if (!socket || !socket.connected || (Date.now() - lastUpdateTime > 1500)) {
+            if (Date.now() - lastUpdateTime > 5000) {
                 try {
-                    const resp = await fetch(apiUrl(`/api/status/${jobId}`));
+                    const resp = await fetch(`/api/status/${jobId}`);
                     const data = await resp.json();
                     if (data && data.success && data.job) {
                         handleProgress(data.job);
                     }
                 } catch (e) {
-                    console.warn('[Progress Watcher] Status check:', e);
+                    console.warn('[Progress Watcher] Fallback ping error:', e);
                 }
             }
-        }, 1500);
+        }, 2000);
     }
 
     function resetGenerateBtn() {
@@ -1819,7 +1614,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (scriptCharCount) scriptCharCount.textContent = '0 characters';
 
             try {
-                const response = await fetch(apiUrl('/api/generate-script-stream'), {
+                const response = await fetch('/api/generate-script-stream', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topic, provider, model })

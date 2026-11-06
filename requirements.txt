@@ -1,16 +1,9 @@
 Flask>=3.0.0
 Flask-Cors>=4.0.0
-Flask-SocketIO>=5.3.6
-python-socketio>=5.11.0
-python-engineio>=4.9.0
 edge-tts>=6.1.0
 Pillow>=10.0.0
 gunicorn>=21.0.0
 werkzeug>=3.0.0
-fastapi>=0.110.0
-gradio>=5.0.0
-uvicorn>=0.30.0
-a2wsgi>=1.10.0
 langchain-core>=0.3.0
 langchain-groq>=0.2.0
 langchain-mistralai>=0.2.0
