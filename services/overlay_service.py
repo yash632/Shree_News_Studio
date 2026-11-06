@@ -6,7 +6,7 @@ import re
 import tempfile
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
-from config import DEFAULT_FONT, BASE_DIR
+from config import DEFAULT_FONT, BASE_DIR, is_low_memory_environment
 
 # Paths to master template plates extracted from user's Hindi News Broadcast Template
 PLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "assets")
@@ -469,8 +469,11 @@ def create_news_overlay(
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     is_vertical = height > width
 
-    # 1. Attempt pixel-perfect HTML rendering whenever Chrome/Chromium is available
-    chrome_bin = find_chrome_binary()
+    # In low-memory cloud environments (e.g. Render 512MB RAM), skip Chromium entirely
+    # to avoid 300MB RAM spike and use ultra-lightweight Pillow directly (< 5MB RAM, instant).
+    # On local workstations (16GB RAM), allow Chrome if available for full HTML fidelity.
+    is_low_mem = is_low_memory_environment()
+    chrome_bin = find_chrome_binary() if not is_low_mem else None
     if chrome_bin:
         ref_w = 1080 if is_vertical else 1920
         ref_h = 1920 if is_vertical else 1080
@@ -737,7 +740,7 @@ def create_news_overlay(
             d_canvas.text((tag_w + int(12 * scale_x), ticker_bar_y + int(24 * scale_y)), dt_str, font=f_time, fill=(241, 245, 249, 255))
 
         ticker_start_x = tag_w + dt_w + int(20 * scale_x)
-        ticker_y = ticker_bar_y + int(20 * scale_y)
+        ticker_y = ticker_bar_y
 
     canvas.save(output_path, "PNG")
     return output_path, output_tag_path, ticker_start_x, ticker_y

@@ -3,7 +3,7 @@ import subprocess
 import shutil
 import datetime
 from typing import Callable, Optional
-from config import DEFAULT_FONT, NEWS_THEMES
+from config import DEFAULT_FONT, NEWS_THEMES, is_low_memory_environment
 from services.overlay_service import create_news_overlay
 
 def get_media_duration(file_path: str) -> float:
@@ -233,70 +233,6 @@ def build_video_filter_graph(
     filter_complex_str = ";".join(filters)
     return extra_inputs, filter_complex_str, current_stream
 
-def is_low_memory_environment() -> bool:
-    """
-    Detects if the application is running in a memory-constrained environment
-    such as Render.com free tier (512MB RAM) or a container with < 1.5GB RAM.
-    On local machines (e.g. user's 16GB laptop), returns False so full 1080p,
-    maximum CPU threads, and best quality settings are used.
-    """
-    # 1. Render platform flags
-    if os.environ.get("RENDER") == "true" or "RENDER_SERVICE_ID" in os.environ or "RENDER_INSTANCE_ID" in os.environ:
-        return True
-
-    # 2. Render port signature (Render assigns PORT=10000 to all hosted web services)
-    if os.environ.get("PORT") == "10000":
-        return True
-
-    # 3. Explicit override
-    env_override = os.environ.get("LOW_MEMORY_MODE", "").lower()
-    if env_override in ("true", "1", "yes"):
-        return True
-    if env_override in ("false", "0", "no"):
-        return False
-
-    # 4. Linux cgroup memory limit check (detects Docker container limits like 512MB)
-    if os.path.exists("/sys/fs/cgroup/memory.max"):
-        try:
-            with open("/sys/fs/cgroup/memory.max", "r") as f:
-                val = f.read().strip()
-                if val != "max" and int(val) < 1500 * 1024 * 1024:
-                    return True
-        except Exception:
-            pass
-
-    if os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
-        try:
-            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
-                val = f.read().strip()
-                if int(val) < 1500 * 1024 * 1024:
-                    return True
-        except Exception:
-            pass
-
-    # 5. /proc/meminfo
-    if os.path.exists("/proc/meminfo"):
-        try:
-            with open("/proc/meminfo", "r") as f:
-                for line in f:
-                    if line.startswith("MemTotal:"):
-                        kb = int(line.split()[1])
-                        if kb < 1500000:
-                            return True
-        except Exception:
-            pass
-
-    # 6. psutil
-    try:
-        import psutil
-        total_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
-        if total_ram_gb < 1.5:
-            return True
-    except Exception:
-        pass
-
-    return False
-
 def render_news_video(
     video_input_path: str,
     audio_input_path: str,
@@ -344,16 +280,17 @@ def render_news_video(
     
     is_low_mem = is_low_memory_environment()
     if is_low_mem:
-        print("[RenderEngine] Low-Memory / Render mode active: using Full HD 1080p ultrafast, threads=2 (< 45MB RAM).")
+        print("[RenderEngine] Low-Memory / Render mode active: using 720p ultrafast, threads=2 (< 30MB RAM).")
         if aspect_ratio == "9:16":
-            target_w, target_h = 1080, 1920
-            ticker_font_size = 28
+            target_w, target_h = 720, 1280
+            ticker_font_size = 22
         else:
-            target_w, target_h = 1920, 1080
-            ticker_font_size = 28
+            target_w, target_h = 1280, 720
+            ticker_font_size = 22
         v_preset = "ultrafast"
         v_threads = "2"
         v_crf = "24"
+        extra_x264_flags = ["-x264-params", "rc-lookahead=10:sync-lookahead=5"]
     else:
         print("[RenderEngine] High-RAM / Local mode active: using Full HD 1080p, veryfast, threads=0 (all cores).")
         if aspect_ratio == "9:16":
@@ -365,6 +302,7 @@ def render_news_video(
         v_preset = "veryfast"
         v_threads = "0"
         v_crf = "23"
+        extra_x264_flags = []
 
     if progress_callback:
         progress_callback(10, "Analyzing audio and video duration...")
@@ -631,6 +569,7 @@ def render_news_video(
         "-c:v", "libx264",
         "-preset", v_preset,
         "-threads", v_threads,
+        *extra_x264_flags,
         "-crf", v_crf,
         "-c:a", "aac",
         "-b:a", "192k",

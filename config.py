@@ -45,6 +45,57 @@ if os.path.exists(_env_path):
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 MISTRAL_API_KEY = os.environ.get("MISTRAL_API_KEY", "")
 
+def is_low_memory_environment() -> bool:
+    """
+    Detects if the application is running in a memory-constrained environment
+    such as Render.com free tier (512MB RAM) or a container with < 1.5GB RAM.
+    On local machines (e.g. user's 16GB laptop), returns False so full 1080p,
+    maximum CPU threads, and best quality settings are used.
+    """
+    if os.environ.get("RENDER") == "true" or "RENDER_SERVICE_ID" in os.environ or "RENDER_INSTANCE_ID" in os.environ:
+        return True
+    if os.environ.get("PORT") == "10000":
+        return True
+    env_override = os.environ.get("LOW_MEMORY_MODE", "").lower()
+    if env_override in ("true", "1", "yes"):
+        return True
+    if env_override in ("false", "0", "no"):
+        return False
+    if os.path.exists("/sys/fs/cgroup/memory.max"):
+        try:
+            with open("/sys/fs/cgroup/memory.max", "r") as f:
+                val = f.read().strip()
+                if val != "max" and int(val) < 1500 * 1024 * 1024:
+                    return True
+        except Exception:
+            pass
+    if os.path.exists("/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            with open("/sys/fs/cgroup/memory/memory.limit_in_bytes", "r") as f:
+                val = f.read().strip()
+                if int(val) < 1500 * 1024 * 1024:
+                    return True
+        except Exception:
+            pass
+    if os.path.exists("/proc/meminfo"):
+        try:
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemTotal:"):
+                        kb = int(line.split()[1])
+                        if kb < 1500000:
+                            return True
+        except Exception:
+            pass
+    try:
+        import psutil
+        total_ram_gb = psutil.virtual_memory().total / (1024 ** 3)
+        if total_ram_gb < 1.5:
+            return True
+    except Exception:
+        pass
+    return False
+
 # Supported Voices for High Quality News Anchors
 NEWS_VOICES = [
     {"id": "hi-IN-MadhurNeural", "name": "★ Madhur (Hindi Male - Classic News Anchor) [Edge-TTS]", "lang": "Hindi"},
