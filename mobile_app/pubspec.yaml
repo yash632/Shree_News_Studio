@@ -1,0 +1,59 @@
+name: shree_news_studio
+description: "Shree News Studio - Professional Hindi TV Broadcast News Creation Mobile App"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # In-App Live HTML5 Broadcast Template Monitor
+  webview_flutter: ^4.10.0
+
+  # Hardware-Accelerated Local Mobile FFmpeg Engine
+  ffmpeg_kit_flutter_new_https_gpl: ^2.6.3
+
+  # Media File Selection (Phone Storage & Gallery)
+  file_picker: ^8.1.6
+
+  # Direct HTTP & Cloud AI Calling (Groq / Mistral)
+  http: ^1.2.2
+
+  # File Storage Path Resolution
+  path_provider: ^2.1.5
+
+  # Free Microsoft Edge Neural TTS Client (Pure Dart)
+  edge_tts: ^1.1.4
+
+  # Android Runtime Storage & Media Permissions
+  permission_handler: ^11.3.1
+
+  # Open Exported Broadcast Video in System Player
+  open_file: ^3.5.10
+
+  # UI Enhancement Icons
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/web/
+    - assets/web/bhopal-news-bulletin.html
+    - assets/web/index.html
+    - assets/web/logo.png
+    - assets/web/highway.jpg
+    - assets/web/palace.jpg
+    - assets/web/globe.jpg
+    - assets/web/fonts/Hind-Bold.ttf
+    - assets/web/fonts/Hind-Regular.ttf
+    - assets/web/fonts/NotoSansDevanagari.ttf
+    - assets/web/static/assets/

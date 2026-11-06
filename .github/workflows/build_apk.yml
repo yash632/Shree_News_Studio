@@ -1,0 +1,52 @@
+name: Build Android APK (Shree News Studio)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'mobile_app/**'
+      - '.github/workflows/build_apk.yml'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab anytime!
+
+jobs:
+  build-apk:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17 (Required for Android Gradle 8+)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter SDK (Stable 3.27.x)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.1'
+          channel: 'stable'
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+          cache-path: "${{ runner.tool_cache }}/fluttercache"
+
+      - name: Verify Flutter & Dart Toolchain
+        run: flutter --version
+
+      - name: Install Flutter Dependencies
+        working-directory: mobile_app
+        run: flutter pub get
+
+      - name: Build Android Release APK
+        working-directory: mobile_app
+        run: flutter build apk --release
+
+      - name: Upload Downloadable APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ShreeNewsStudio-Release-APK
+          path: mobile_app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 30

@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>श्री NEWS 24×7 – Breaking News</title>
+<link href="https://fonts.googleapis.com/css2?family=Hind:wght@500;600;700&family=Poppins:wght@700;800&family=Roboto+Condensed:wght@700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{
+  width:100%;
+  height:100%;
+  margin:0;
+  padding:0;
+  background:transparent;
+  overflow:hidden !important;
+  scrollbar-width:none !important;
+  -ms-overflow-style:none !important;
+}
+::-webkit-scrollbar,*::-webkit-scrollbar{
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+  background:transparent !important;
+}
+body{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+}
+.wrap{
+  transform-origin:top left;
+  position:absolute;
+}
+.poster{position:relative;width:941px;height:1672px;overflow:hidden;font-family:'Hind','Noto Sans Devanagari',sans-serif;background:#fff url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat}
+.a{position:absolute}
+/* text: left + vertical-centre are exact; font-size auto-fits to data-w (px width) */
+.t{position:absolute;white-space:nowrap;transform:translateY(-50%);line-height:1.15;font-weight:700;z-index:20}
+.en{font-family:'Poppins',sans-serif;font-weight:800}
+.rc{font-family:'Roboto Condensed','Arial Narrow',sans-serif;font-weight:700}
+
+/* ===== TOP BACKGROUND ===== */
+.topbg{left:0;top:0;width:941px;height:352px;background:url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat;
+/*
+ background:
+  radial-gradient(ellipse 150px 110px at 60px 110px,#fff,transparent 80%),
+  radial-gradient(ellipse 260px 70px at 470px 215px,rgba(215,50,160,.75),transparent 80%),
+  radial-gradient(ellipse 330px 130px at 500px 0,rgba(110,55,130,.95),transparent 75%),
+  radial-gradient(ellipse 240px 110px at 640px 0,rgba(155,25,75,.95),transparent 75%),
+  linear-gradient(180deg,rgba(255,255,255,0) 60%,rgba(240,150,185,.9) 100%),
+  linear-gradient(90deg,#ebc9d5 0%,#dca2ba 18%,#bd7a9b 34%,#a35a8a 50%,#c57a98 66%,#d9a1b3 85%,#cc96a9 100%)*/
+}
+/* title */
+.title{left:22px;top:64px;width:588px;height:117px;border-radius:11px;z-index:10;border:3px solid #fff;overflow:hidden;
+ background:linear-gradient(180deg,#fdd12c 0%,#fcbc08 45%,#f7a504 100%);
+ box-shadow:0 0 10px 2px rgba(255,255,255,.7),0 4px 10px rgba(110,0,30,.35)}
+.title i{position:absolute;left:0;top:0;width:282px;height:100%;
+ background:linear-gradient(180deg,#e30514 0%,#c10105 35%,#a00002 70%,#820101 100%);
+ clip-path:polygon(0 0,266px 0,282px 50%,266px 100%,0 100%)}
+/* logo */
+.logoBox{left:622px;top:45px;width:319px;height:170px;z-index:10;border-radius:28px 0 0 28px;
+ background:linear-gradient(180deg,#fff 0%,#fdfafc 80%,#f3e3ea 100%);box-shadow:0 3px 10px rgba(120,0,40,.35)}
+.shri{left:640px;top:52px;width:126px;height:116px;border-radius:9px 0 0 9px;border:2px solid #fff;
+ background:linear-gradient(160deg,#f20d2c 0%,#c2282e 45%,#9b1b04 100%);box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.newsBox{left:768px;top:52px;width:149px;height:62px;border-radius:0 9px 0 0;background:linear-gradient(90deg,#16346a,#011d42 45%)}
+.x247{left:768px;top:115px;width:149px;height:53px;border-radius:0 0 9px 0;background:linear-gradient(180deg,#e61d2b,#c10f1a 55%,#a00706)}
+/* strip */
+.strip{left:0;top:228px;width:941px;height:112px;border-radius:12px;z-index:5;
+ background:linear-gradient(180deg,#f1ecee 0%,#fbf1f3 40%,#fcf3f3 100%);box-shadow:0 2px 6px rgba(120,0,40,.3)}
+.div{width:4px;top:238px;height:92px;background:linear-gradient(180deg,#b8121f,#8f0a14);border-radius:2px;z-index:6}
+.thumb{background:linear-gradient(135deg,#bfd0e2,#7d98b4);background-size:cover;background-position:center;border-radius:3px;z-index:7}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.globe{border-radius:50%;background:radial-gradient(circle at 35% 30%,#7fb2ea,#2a5da6 45%,#071d44 85%)}
+
+/* ===== RED SECTION ===== */
+.redBg{left:0;top:352px;width:941px;height:1108px;background:transparent;}
+/*
+ background:
+  radial-gradient(ellipse 520px 12px at 50% 14px,rgba(255,170,180,.95),transparent 90%),
+  radial-gradient(ellipse 480px 12px at 50% 776px,rgba(255,110,125,.95),transparent 90%),
+  radial-gradient(ellipse 130px 220px at 0 250px,rgba(225,10,5,.85),transparent 90%),
+  radial-gradient(ellipse 120px 200px at 941px 70px,rgba(190,0,8,.9),transparent 90%),
+  linear-gradient(180deg,#8d010b 0%,#a90003 5%,#b30202 25%,#930100 50%,#790100 72%,#8a0000 100%)*/
+
+.frame{left:22px;top:385px;width:898px;height:717px;border-radius:0;padding:0;z-index:1;overflow:hidden;
+ background:transparent;box-shadow:none;border:none;}
+/* >>> APNI MAIN IMAGE: .main-image me background-image ya <img> lagayen <<< */
+.main-image{width:100%;height:100%;border-radius:0;overflow:hidden;background:transparent;border:none;box-shadow:none;}
+.main-image img{width:100%;height:100%;object-fit:contain;display:block}
+.loc{left:32px;top:402px;width:356px;height:66px;display:flex;border-radius:10px;overflow:hidden;box-shadow:0 3px 8px rgba(0,0,0,.45);z-index:10}
+.loc .pin{width:63px;background:linear-gradient(180deg,#e70a24,#a80c13);display:flex;align-items:center;justify-content:center}
+.loc .nm{flex:1;background:linear-gradient(180deg,#0a2349,#001a3c)}
+
+/* ===== BREAKING ===== */
+.brk{left:0;top:1150px;width:941px;height:206px;border-radius:30px 30px 0 0;
+ background:linear-gradient(180deg,#e0060d 0%,#c10201 70%,#8a0303 100%);
+ box-shadow:inset 0 0 0 2px rgba(255,200,130,.75),inset 0 6px 14px rgba(255,120,120,.35)}
+.pGold{left:10px;top:1150px;width:312px;height:206px;background:linear-gradient(180deg,#fcdf6b,#f2a020 60%,#d77a10);
+ clip-path:polygon(0 0,284px 0,312px 50%,284px 100%,0 100%);border-radius:28px 0 0 0;z-index:3}
+.pRed{left:13px;top:1153px;width:304px;height:200px;
+ background:radial-gradient(ellipse 150px 60px at 55% 0,#f2271e,transparent 100%),linear-gradient(180deg,#b01a09 0%,#9c0201 45%,#7b0000 100%);
+ clip-path:polygon(0 0,277px 0,303px 50%,277px 100%,0 100%);border-radius:26px 0 0 0;z-index:4}
+.chev{left:292px;top:1150px;width:90px;height:206px;background:linear-gradient(135deg,#fde37a 0%,#f9b710 50%,#f07d10 100%);
+ clip-path:polygon(0 0,46px 0,88px 50%,46px 100%,0 100%,30px 50%);z-index:2}
+.sub{left:8px;top:1352px;width:925px;height:91px;border-radius:0 0 34px 34px;z-index:6;
+ background:linear-gradient(180deg,#e9e7e9 0%,#efeeef 50%,#fdfbfb 100%);
+ box-shadow:0 0 0 2px rgba(255,110,125,.85),0 5px 12px rgba(0,0,0,.4)}
+
+/* ===== SILVER + TICKER ===== */
+.silver{left:0;top:1455px;width:941px;height:217px;
+ background:
+  linear-gradient(90deg,rgba(150,150,160,.45),transparent 22%,transparent 78%,rgba(150,150,160,.45)),
+  linear-gradient(180deg,#e11335 0,#ccb3be 3%,#e3dfe1 22%,#d9d9dc 60%,#c9c9ce 100%)}
+.ticker{left:15px;top:1538px;width:917px;height:88px;border-radius:12px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.45);z-index:10;background:#011c3d}
+.ticker>i{position:absolute;top:0;height:100%}
+.k4{left:436px;width:481px;background:linear-gradient(180deg,#0a2349,#011c3d 50%,#011b3c);z-index:1}
+.k3{left:268px;width:183px;background:linear-gradient(180deg,#dc0312,#c70410 55%,#940102);clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%);z-index:2}
+.k2{left:135px;width:148px;background:linear-gradient(180deg,#fdfdfd,#f4f3f4 60%,#e9e7e9);clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%);z-index:3}
+.k1{left:0;width:145px;border-radius:12px 0 0 12px;background:linear-gradient(180deg,#e03030,#d30202 40%,#960101);clip-path:polygon(0 0,100% 0,calc(100% - 10px) 100%,0 100%);z-index:4}
+#tickerText{position:absolute;left:455px;top:8px;width:445px;height:72px;overflow:hidden;color:#fff;font:700 24px/1.35 'Hind','Noto Sans Devanagari',sans-serif;white-space:normal;z-index:8}
+#track1,#track2{display:none}
+@keyframes tickerRollLoop{0%{transform:translateY(0)}100%{transform:translateY(-50%)}}
+.ticker-roller{display:block;animation:tickerRollLoop 14s linear infinite;will-change:transform}
+.poster.ticker-off .brk,.poster.ticker-off .pGold,.poster.ticker-off .pRed,.poster.ticker-off .chev{top:1320px}
+.poster.ticker-off .brk{height:206px}
+.poster.ticker-off .pGold,.poster.ticker-off .pRed,.poster.ticker-off .chev{height:206px}
+.poster.ticker-off #bn1{top:1389px!important}
+.poster.ticker-off #bn2{top:1462px!important}
+.poster.ticker-off #headline1{top:1380px!important}
+.poster.ticker-off #headline2{top:1458px!important}
+.poster.ticker-off .sub{top:1522px!important}
+.poster.ticker-off #subtitle{top:1563px!important}
+.poster.ticker-off .silver,.poster.ticker-off .ticker,.poster.ticker-off #time,.poster.ticker-off #date,.poster.ticker-off #weekday,.poster.ticker-off #label,.poster.ticker-off #track1,.poster.ticker-off #track2{display:none!important}
+.poster.datetime-off #time,.poster.datetime-off #date,.poster.datetime-off #weekday{display:none!important}
+.poster.datetime-off #label{left:15px!important;top:1538px!important;width:200px!important;height:88px!important;font-size:34px!important;clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%)!important;border-radius:12px 0 0 12px!important;background:linear-gradient(180deg,#e03030,#d30202 40%,#960101)!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:20!important;transform:none!important}
+.poster.datetime-off .silver{top:1455px!important}
+.poster.datetime-off #ticker{left:215px!important;width:711px!important;border-radius:0 12px 12px 0!important}
+.poster.datetime-off #ticker .k1,.poster.datetime-off #ticker .k2,.poster.datetime-off #ticker .k3{display:none!important}
+.poster.datetime-off #ticker .k4{left:0!important;width:100%!important}
+.poster.datetime-off #tickerText{left:15px!important;width:680px!important;height:72px!important;top:8px!important;overflow:hidden!important;display:block!important}
+.poster.ticker-off #label,
+.poster.ticker-off #ticker,
+.poster.ticker-off #tickerText,
+.poster.ticker-off .silver,
+.poster.ticker-off #time,
+.poster.ticker-off #date,
+.poster.ticker-off #weekday,
+.poster.ticker-off #track1,
+.poster.ticker-off #track2{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+<div class="poster">
+
+<div class="a topbg"></div>
+
+<!-- TITLE -->
+<div class="a title"><i></i></div>
+<div class="t" data-fs="64" data-w="214" style="left:55px;top:115px;color:#fff;text-shadow:0 3px 4px rgba(0,0,0,.45)">आज की</div>
+<div class="t" data-fs="64" data-w="262" style="left:321px;top:123px;color:#111">बड़ी खबर</div>
+
+<!-- LOGO -->
+<div class="a logoBox" id="portraitLogoBox" style="display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px;">
+  <img id="portraitLogoImg" src="logo.png" alt="Channel Logo" style="width:100%;height:100%;object-fit:contain;display:block;">
+</div>
+
+<!-- STRIP -->
+<div class="a strip"></div>
+<div class="a thumb" id="thumb1" style="left:17px;top:240px;width:118px;height:88px"><img src="/static/assets/palace.jpg" alt=""></div>
+<div class="a div" style="left:323px"></div>
+<div class="a thumb globe" id="thumb2" style="left:337px;top:243px;width:82px;height:82px"><img src="/static/assets/globe.jpg" alt=""></div>
+<div class="a div" style="left:597px"></div>
+<div class="a thumb" id="thumb3" style="left:611px;top:240px;width:120px;height:88px"><img src="/static/assets/highway.jpg" alt=""></div>
+<div class="t" data-fs="28" data-w="161" style="left:146px;top:261px;color:#222">प्रदेश की हर खबर</div>
+<div class="t" data-fs="30" data-w="120" style="left:147px;top:299px;color:#cf1620">सबसे पहले</div>
+<div class="t" data-fs="28" data-w="149" style="left:433px;top:261px;color:#222">देश-दुनिया की</div>
+<div class="t" data-fs="30" data-w="136" style="left:433px;top:298px;color:#cf1620">ताजा अपडेट</div>
+<div class="t" data-fs="28" data-w="156" style="left:744px;top:261px;color:#222">आपके शहर की</div>
+<div class="t" data-fs="30" data-w="184" style="left:742px;top:300px;color:#cf1620">हर छोटी-बड़ी खबर</div>
+
+<!-- RED SECTION -->
+<div class="a redBg"></div>
+<div class="a frame" id="frame"><div class="main-image" id="mainImage"><!-- yahan apni image lagayen --></div></div>
+<div class="a loc" id="loc">
+  <div class="pin"><svg width="32" height="42" viewBox="0 0 24 32"><path fill="#fff" d="M12 0C5.4 0 0 5.2 0 11.7 0 20 12 32 12 32s12-12 12-20.3C24 5.2 18.6 0 12 0z"/><circle cx="12" cy="11.5" r="4.8" fill="#c0101c"/></svg></div>
+  <div class="nm"></div>
+</div>
+<div class="t" id="locationText" data-fs="40" data-w="257" style="left:108px;top:433px;color:#fff;font-weight:600">भोपाल, मध्य प्रदेश</div>
+
+<!-- BREAKING -->
+<div class="a brk"></div>
+<div class="a chev"></div>
+<div class="a pGold"></div>
+<div class="a pRed"></div>
+<div class="t rc" id="bn1" data-fs="56" data-w="247" style="left:41px;top:1219px;background:linear-gradient(180deg,#fff 35%,#c4c4cb 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 3px rgba(0,0,0,.65))">BREAKING</div>
+<div class="t rc" id="bn2" data-fs="78" data-w="200" style="left:68px;top:1292px;background:linear-gradient(180deg,#ffe96a 0%,#fbbf12 60%,#e89500 100%);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 2px rgba(70,0,0,.85))">NEWS</div>
+<div class="t" id="headline1" data-fs="54" data-w="545" style="left:377px;top:1210px;color:#fff;text-shadow:0 3px 5px rgba(0,0,0,.45)">भोपाल में आज तेज बारिश,</div>
+<div class="t" id="headline2" data-fs="54" data-w="496" style="left:400px;top:1288px;color:#fff;text-shadow:0 3px 5px rgba(0,0,0,.45)">कई इलाकों में जलभराव</div>
+<div class="a sub"></div>
+<div class="t" id="subtitle" data-fs="42" data-w="857" style="left:47px;top:1393px;color:#111;z-index:21">मौसम विभाग ने अगले 24 घंटे के लिए जारी किया अलर्ट</div>
+
+<!-- SILVER + TICKER -->
+<div class="a silver"></div>
+<div class="a ticker" id="ticker"><i class="k4"></i><i class="k3"></i><i class="k2"></i><i class="k1"></i><div id="tickerText"></div></div>
+<div class="t rc" id="time" data-fs="38" data-w="126" style="left:24px;top:1581px;color:#fff;z-index:30;text-shadow:0 2px 3px rgba(0,0,0,.35)">10:25 AM</div>
+<div class="t rc" id="date" data-fs="22" data-w="110" style="left:176px;top:1565px;color:#111;z-index:30">28 Oct 2026</div>
+<div class="t" id="weekday" data-fs="26" data-w="83" style="left:190px;top:1595px;color:#111;z-index:30;font-weight:700">मंगलवार</div>
+<div class="t" id="label" data-fs="40" data-w="137" style="left:317px;top:1582px;color:#fff;z-index:30;text-shadow:0 2px 3px rgba(0,0,0,.35)">ताजा खबर</div>
+<div class="t" id="track1" style="display:none!important"></div>
+<div class="t" id="track2" style="display:none!important"></div>
+
+</div>
+</div>
+
+<script>
+// 1) Har text ka font-size apne-aap adjust hota hai taaki width reference image se match kare
+function fitText(){
+  document.querySelectorAll('.t').forEach(function(e){
+    var fs=parseFloat(e.dataset.fs)||40, target=parseFloat(e.dataset.w);
+    for(var i=0;i<4;i++){ e.style.fontSize=fs+'px'; var w=e.offsetWidth; if(!w)break; fs=fs*target/w; }
+    e.style.fontSize=fs+'px';
+  });
+}
+// 2) Poster ko screen me fit karta hai
+function fitScreen(){
+  var w=document.getElementById('wrap');
+  if(!w) return;
+  var s=Math.min(window.innerWidth/941, window.innerHeight/1672);
+  var leftOffset = Math.max(0, (window.innerWidth - 941 * s) / 2);
+  var topOffset = Math.max(0, (window.innerHeight - 1672 * s) / 2);
+  w.style.transform='scale('+s+')';
+  w.style.transformOrigin='top left';
+  w.style.position='absolute';
+  w.style.left=leftOffset+'px';
+  w.style.top=topOffset+'px';
+  w.style.width='941px';
+  w.style.height='1672px';
+}
+function init(){ fitText(); fitScreen(); }
+function setVisible(id, visible){
+  var el=document.getElementById(id);
+  if(el){
+    if(visible){
+      el.style.removeProperty('display');
+    }else{
+      el.style.setProperty('display', 'none', 'important');
+    }
+  }
+}
+function splitHeadline(text){
+  if(!text) return ['',''];
+  if(text.indexOf(',')!==-1){
+    var p=text.split(',');
+    return [p[0].trim()+',', p.slice(1).join(',').trim()];
+  }
+  if(text.indexOf(':')!==-1){
+    var p=text.split(':');
+    return [p[0].trim()+':', p.slice(1).join(':').trim()];
+  }
+  var words=text.trim().split(/\s+/);
+  if(words.length>4){
+    var mid=Math.ceil(words.length/2);
+    return [words.slice(0,mid).join(' '), words.slice(mid).join(' ')];
+  }
+  return [text,''];
+}
+function setPreviewData(data){
+  if(!data) return;
+  var parts=splitHeadline(data.headline||'भोपाल में आज तेज बारिश, कई इलाकों में जलभराव');
+  var h1=document.getElementById('headline1'), h2=document.getElementById('headline2');
+  if(h1) h1.textContent=parts[0]||'';
+  if(h2) h2.textContent=parts[1]||'';
+  var sub=document.getElementById('subtitle');
+  var subBox=document.querySelector('.sub');
+  var hasSub = data.subtitle && data.subtitle.trim();
+  if(sub) {
+    sub.textContent = hasSub ? data.subtitle.trim() : '';
+    sub.style.display = hasSub ? '' : 'none';
+  }
+  if(subBox) {
+    subBox.style.display = hasSub ? '' : 'none';
+  }
+  var loc=document.getElementById('locationText');
+  if(loc) loc.textContent=(data.location||'भोपाल, मध्य प्रदेश').replace(/^📍\s*/,'');
+  var label=document.getElementById('label');
+  if(label) label.textContent=data.tickerTag||'ताजा खबर';
+  var t1=document.getElementById('track1'), t2=document.getElementById('track2');
+  if(t1) t1.textContent='';
+  if(t2) t2.textContent='';
+  var tickerText=document.getElementById('tickerText');
+  var tVal=(data.ticker||'').trim()||'भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर';
+  if(tickerText){
+    tickerText.innerHTML='<div class="ticker-roller" id="tickerRoller"><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div></div>';
+    var roller=document.getElementById('tickerRoller');
+    var firstPart=roller?roller.firstElementChild:null;
+    if(firstPart){
+      var h=firstPart.offsetHeight;
+      if(h<=72){
+        roller.style.animation='none';
+        roller.innerHTML='<div style="height:72px;display:flex;align-items:center;">'+tVal+'</div>';
+      }else{
+        var duration=Math.max(8,Math.round(h/18));
+        roller.style.animationDuration=duration+'s';
+      }
+    }
+  }
+  document.querySelector('.poster').classList.toggle('ticker-off', !data.tickerEnabled);
+  document.querySelector('.poster').classList.toggle('datetime-off', !data.datetimeEnabled);
+  setVisible('loc', !!data.locationEnabled);
+  setVisible('locationText', !!data.locationEnabled);
+  setVisible('time', !!data.datetimeEnabled && !!data.tickerEnabled);
+  setVisible('date', !!data.datetimeEnabled && !!data.tickerEnabled);
+  setVisible('weekday', !!data.datetimeEnabled && !!data.tickerEnabled);
+  setVisible('label', !!data.tickerEnabled);
+  setVisible('ticker', !!data.tickerEnabled);
+  var video=document.getElementById('mainVideo');
+  if(data.videoSrc){
+    if(!video){
+      video=document.createElement('video');
+      video.id='mainVideo';
+      video.autoplay=true; video.loop=true; video.muted=true; video.playsInline=true;
+      video.style.cssText='width:100%;height:100%;object-fit:contain;display:block';
+      document.getElementById('mainImage').appendChild(video);
+    }
+    if(video.src!==data.videoSrc){ video.src=data.videoSrc; video.load(); }
+    video.play().catch(function(){});
+  } else if(video) {
+    video.removeAttribute('src'); video.load();
+  }
+  if(data.frameScale){
+    var scaleVal = data.frameScale;
+    var f = document.querySelector('.frame');
+    if(f){
+      var w, h, x, y;
+      var stdW = 898;
+      var topBound = 340;
+      var bottomBound = data.tickerEnabled ? 1150 : 1320;
+      var availH = bottomBound - topBound;
+      var centerY = Math.round((topBound + bottomBound) / 2);
+      var stdH = Math.min(717, Math.round(availH * 0.88));
+      if (scaleVal >= 100) {
+        var t = Math.min(1.0, (scaleVal - 100) / 150);
+        w = Math.round(stdW + (941 - stdW) * t);
+        h = Math.round(stdH + (availH - stdH) * t);
+      } else {
+        var scale = Math.max(0.5, scaleVal / 100);
+        w = Math.round(stdW * scale);
+        h = Math.round(stdH * scale);
+      }
+      x = Math.round((941 - w) / 2);
+      y = Math.round(centerY - (h / 2));
+      f.style.width = w + 'px';
+      f.style.height = h + 'px';
+      f.style.left = x + 'px';
+      f.style.top = y + 'px';
+      f.style.zIndex = '1';
+      if(video){
+        video.style.objectFit = (scaleVal >= 180) ? 'cover' : 'contain';
+      }
+      var loc = document.getElementById('loc');
+      if(loc){
+        loc.style.left = Math.max(22, x + 10) + 'px';
+        loc.style.top = Math.max(355, y + 17) + 'px';
+      }
+      var locText = document.getElementById('locationText');
+      if(locText){
+        locText.style.left = Math.max(98, x + 86) + 'px';
+        locText.style.top = Math.max(386, y + 48) + 'px';
+      }
+    }
+  }
+  if(data.logoSrc){
+    var pLogo = document.getElementById('portraitLogoImg');
+    if(pLogo) pLogo.src = data.logoSrc;
+  }
+  fitText();
+}
+window.addEventListener('message',function(event){
+  if(event.origin===window.location.origin && event.data){
+    if(event.data.type==='portrait-preview'){
+      setPreviewData(event.data);
+    } else if(event.data.type==='portrait-audio-control'){
+      var v=document.getElementById('mainVideo');
+      if(v){
+        if(event.data.muted!==undefined) v.muted=event.data.muted;
+        if(event.data.volume!==undefined) v.volume=event.data.volume;
+        if(event.data.currentTime!==undefined) v.currentTime=event.data.currentTime;
+        if(event.data.action==='play') v.play().catch(function(){});
+        if(event.data.action==='pause') v.pause();
+      }
+    }
+  }
+});
+window.addEventListener('resize',fitScreen);
+window.addEventListener('load',init);
+if(document.fonts&&document.fonts.ready){document.fonts.ready.then(init);}
+init();
+</script>
+</body>
+</html>
