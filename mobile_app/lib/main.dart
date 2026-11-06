@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:gal/gal.dart';
 import 'package:video_player/video_player.dart';
 
 import 'constants/theme.dart';

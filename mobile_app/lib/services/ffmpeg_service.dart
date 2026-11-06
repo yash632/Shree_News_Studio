@@ -6,7 +6,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/return_code.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit_config.dart';
-import 'package:gal/gal.dart';
 import '../models/news_config.dart';
 import 'tts_service.dart';
 
@@ -235,13 +234,7 @@ class MobileFfmpegService {
     final returnCode = await session.getReturnCode();
 
     if (ReturnCode.isSuccess(returnCode)) {
-      onProgress(98, "Saving video to phone gallery...");
-      try {
-        await Gal.putVideo(outputPath);
-      } catch (e) {
-        print("Gallery save error: $e");
-      }
-      onProgress(100, "News video generated and saved to Gallery!");
+      onProgress(100, "News video generated successfully!");
       return outputPath;
     } else {
       final logs = await session.getAllLogsAsString();

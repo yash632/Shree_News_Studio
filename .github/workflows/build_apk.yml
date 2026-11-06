@@ -20,7 +20,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Flutter 3.24.5 (Compatible with FFmpegKit V1/V2 Embedding)
+      - name: Set up Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.5'
@@ -37,14 +37,18 @@ jobs:
           cp -r mobile_app/assets clean_app/
           cp mobile_app/pubspec.yaml clean_app/pubspec.yaml
 
-          # 3. Configure minSdkVersion to 24 for FFmpeg
+          # 3. Configure Android SDK 35 & MinSDK 24
           echo "flutter.minSdkVersion=24" >> clean_app/android/local.properties
+          echo "flutter.compileSdkVersion=35" >> clean_app/android/local.properties
+          echo "flutter.targetSdkVersion=35" >> clean_app/android/local.properties
+
           if [ -f clean_app/android/app/build.gradle ]; then
             sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' clean_app/android/app/build.gradle || true
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle || true
-          fi
-          if [ -f clean_app/android/app/build.gradle.kts ]; then
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle.kts || true
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' clean_app/android/app/build.gradle || true
           fi
 
           # 4. Add Appodeal Maven mirror for ffmpeg-kit-full-gpl binary resolution
