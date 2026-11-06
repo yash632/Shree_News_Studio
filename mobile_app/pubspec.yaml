@@ -14,19 +14,16 @@ dependencies:
   webview_flutter: ^4.10.0
 
   # Hardware-Accelerated Local Mobile FFmpeg Engine
-  ffmpeg_kit_flutter_new_https_gpl: ^2.6.3
+  ffmpeg_kit_flutter_full_gpl: ^6.0.3
 
   # Media File Selection (Phone Storage & Gallery)
-  file_picker: ^8.1.6
+  file_picker: ^8.1.4
 
   # Direct HTTP & Cloud AI Calling (Groq / Mistral)
   http: ^1.2.2
 
   # File Storage Path Resolution
-  path_provider: ^2.1.5
-
-  # Free Microsoft Edge Neural TTS Client (Pure Dart)
-  edge_tts: ^1.1.4
+  path_provider: ^2.1.4
 
   # Android Runtime Storage & Media Permissions
   permission_handler: ^11.3.1
@@ -47,13 +44,5 @@ flutter:
 
   assets:
     - assets/web/
-    - assets/web/bhopal-news-bulletin.html
-    - assets/web/index.html
-    - assets/web/logo.png
-    - assets/web/highway.jpg
-    - assets/web/palace.jpg
-    - assets/web/globe.jpg
-    - assets/web/fonts/Hind-Bold.ttf
-    - assets/web/fonts/Hind-Regular.ttf
-    - assets/web/fonts/NotoSansDevanagari.ttf
-    - assets/web/static/assets/
+    - assets/web/fonts/
+    - assets/web/static/

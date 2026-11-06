@@ -8,12 +8,12 @@
 <style>
 @font-face {
   font-family: 'Hind';
-  src: url('../fonts/Hind-Bold.ttf') format('truetype');
+  src: url('fonts/Hind-Bold.ttf') format('truetype'), url('../fonts/Hind-Bold.ttf') format('truetype');
   font-weight: 700 900;
 }
 @font-face {
   font-family: 'Hind';
-  src: url('../fonts/Hind-Regular.ttf') format('truetype');
+  src: url('fonts/Hind-Regular.ttf') format('truetype'), url('../fonts/Hind-Regular.ttf') format('truetype');
   font-weight: 400 600;
 }
 
@@ -290,6 +290,24 @@ function fit(){
   c.style.marginTop = (-540*s)+'px';
 }
 addEventListener('resize', fit); fit();
+
+window.prepareForOverlayExport = function() {
+  document.body.style.background = 'transparent';
+  var cv = $('canvas');
+  if (cv) cv.style.background = 'transparent';
+  var gl = document.querySelector('.glow');
+  if (gl) gl.style.display = 'none';
+  var fr = $('frame');
+  if (fr) fr.style.background = 'transparent';
+};
+
+window.restoreAfterOverlayExport = function() {
+  document.body.style.background = '#000';
+  var cv = $('canvas');
+  if (cv) cv.style.background = 'radial-gradient(ellipse at 50% 45%,#1b2a6b 0%,#0c1440 45%,#2a0a14 100%)';
+  var gl = document.querySelector('.glow');
+  if (gl) gl.style.display = 'block';
+};
 </script>
 </body>
 </html>

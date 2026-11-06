@@ -47,3 +47,4 @@ class BroadcastConfig {
           "खेल जगत से बड़ी अपडेट"
         ];
 }
+

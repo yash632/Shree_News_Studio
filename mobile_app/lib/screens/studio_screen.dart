@@ -78,15 +78,19 @@ class _StudioScreenState extends State<StudioScreen> {
     if (!_isWebViewReady) return;
 
     final jsCode = '''
-      if (typeof fit === "function") fit();
-      var h1 = document.getElementById("mainHeadline") || document.querySelector(".h1");
-      if (h1) h1.textContent = ${jsonEncode(_headlineController.text)};
-      var sub = document.getElementById("subHeadline") || document.querySelector(".sub");
+      var hl = document.getElementById("hl");
+      if (hl) hl.textContent = ${jsonEncode(_headlineController.text)};
+      var sub = document.getElementById("subt");
       if (sub) sub.textContent = ${jsonEncode(_subHeadlineController.text)};
-      var loc = document.getElementById("locationText");
+      var loc = document.getElementById("location");
       if (loc) loc.textContent = ${jsonEncode(_locationController.text.replaceAll('📍', '').trim())};
-      var ttext = document.getElementById("tickerText");
-      if (ttext) ttext.textContent = ${jsonEncode(_tickerController.text)};
+      var trk = document.getElementById("track");
+      if (trk) {
+        var t = ${jsonEncode(_tickerController.text)};
+        trk.innerHTML = "<span>" + t + "</span><span>" + t + "</span>";
+      }
+      if (typeof fitAll === "function") fitAll();
+      if (typeof fit === "function") fit();
     ''';
     _webViewController.runJavaScript(jsCode);
   }
@@ -164,8 +168,35 @@ class _StudioScreenState extends State<StudioScreen> {
     });
 
     try {
-      // 1. Capture exact Web UI overlay snapshot from WebView
+      // 1. Capture exact Web UI overlay snapshot from WebView (with transparent frame center)
+      await _webViewController.runJavaScript('''
+        if (typeof window.prepareForOverlayExport === "function") {
+          window.prepareForOverlayExport();
+        } else {
+          document.body.style.background = "transparent";
+          var cv = document.getElementById("canvas");
+          if (cv) cv.style.background = "transparent";
+          var gl = document.querySelector(".glow");
+          if (gl) gl.style.display = "none";
+        }
+      ''');
+      await Future.delayed(const Duration(milliseconds: 150));
+
       final imageBytes = await _webViewController.takeScreenshot();
+
+      // Restore monitor background
+      await _webViewController.runJavaScript('''
+        if (typeof window.restoreAfterOverlayExport === "function") {
+          window.restoreAfterOverlayExport();
+        } else {
+          document.body.style.background = "#000";
+          var cv = document.getElementById("canvas");
+          if (cv) cv.style.background = "radial-gradient(ellipse at 50% 45%,#1b2a6b 0%,#0c1440 45%,#2a0a14 100%)";
+          var gl = document.querySelector(".glow");
+          if (gl) gl.style.display = "block";
+        }
+      ''');
+
       if (imageBytes == null || imageBytes.isEmpty) {
         throw Exception("Failed to capture Web UI monitor snapshot.");
       }
@@ -572,3 +603,4 @@ class _StudioScreenState extends State<StudioScreen> {
     );
   }
 }
+

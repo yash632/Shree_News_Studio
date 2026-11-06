@@ -1,52 +1,81 @@
-name: Build Android APK (Shree News Studio)
+name: Build Android APK
 
 on:
   push:
-    branches: [ "main" ]
-    paths:
-      - 'mobile_app/**'
-      - '.github/workflows/build_apk.yml'
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab anytime!
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
-  build-apk:
-    name: Build Release APK
+  build:
+    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17 (Required for Android Gradle 8+)
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Flutter SDK (Stable 3.27.x)
+      - name: Set up Flutter 3.24.5
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'
-          channel: 'stable'
+          flutter-version: '3.24.5'
           cache: true
-          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
-          cache-path: "${{ runner.tool_cache }}/fluttercache"
 
-      - name: Verify Flutter & Dart Toolchain
-        run: flutter --version
+      - name: Scaffold Clean Official Flutter Project
+        run: |
+          # 1. Create pristine official app scaffold with Flutter 3.24.5
+          flutter create -t app --org com.shreenews --project-name shree_news_studio clean_app
+          
+          # 2. Transfer our code, assets and dependencies
+          rm -rf clean_app/lib/*
+          cp -r mobile_app/lib/* clean_app/lib/
+          cp -r mobile_app/assets clean_app/
+          cp mobile_app/pubspec.yaml clean_app/pubspec.yaml
 
-      - name: Install Flutter Dependencies
-        working-directory: mobile_app
-        run: flutter pub get
+          # 3. Configure Android SDK 35 & MinSDK 24
+          echo "flutter.minSdkVersion=24" >> clean_app/android/local.properties
+          echo "flutter.compileSdkVersion=35" >> clean_app/android/local.properties
+          echo "flutter.targetSdkVersion=35" >> clean_app/android/local.properties
+
+          if [ -f clean_app/android/app/build.gradle ]; then
+            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' clean_app/android/app/build.gradle || true
+            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle || true
+            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/g' clean_app/android/app/build.gradle || true
+            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' clean_app/android/app/build.gradle || true
+          fi
+
+          # 4. Add Appodeal & Jitpack Maven mirrors for ffmpeg-kit-full-gpl binary resolution
+          cat << 'EOF' >> clean_app/android/build.gradle
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+                  maven { url "https://artifactory.appodeal.com/appodeal-public/" }
+                  maven { url "https://jitpack.io" }
+              }
+          }
+          EOF
+
+          # 5. Add Permissions to AndroidManifest.xml
+          sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"\/>' clean_app/android/app/src/main/AndroidManifest.xml
 
       - name: Build Android Release APK
-        working-directory: mobile_app
-        run: flutter build apk --release
+        run: |
+          cd clean_app
+          flutter pub get
+          flutter build apk --release
 
-      - name: Upload Downloadable APK Artifact
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ShreeNewsStudio-Release-APK
-          path: mobile_app/build/app/outputs/flutter-apk/app-release.apk
+          path: clean_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
