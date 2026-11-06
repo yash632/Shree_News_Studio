@@ -20,15 +20,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.24.5 (Compatible with FFmpegKit V1/V2 Embedding)
         uses: subosito/flutter-action@v2
         with:
-          channel: 'stable'
+          flutter-version: '3.24.5'
           cache: true
 
       - name: Scaffold Clean Official Flutter Project
         run: |
-          # 1. Create pristine official app scaffold
+          # 1. Create pristine official app scaffold with Flutter 3.24.5
           flutter create -t app --org com.shreenews --project-name shree_news_studio clean_app
           
           # 2. Transfer our code, assets and dependencies
@@ -47,7 +47,7 @@ jobs:
             sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle.kts || true
           fi
 
-          # 4. Add Appodeal Maven mirror for ffmpeg-kit-full-gpl binaries
+          # 4. Add Appodeal Maven mirror for ffmpeg-kit-full-gpl binary resolution
           cat << 'EOF' >> clean_app/android/build.gradle
           allprojects {
               repositories {
