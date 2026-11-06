@@ -17,7 +17,8 @@ class StudioTheme {
       scaffoldBackgroundColor: bgDark,
       primaryColor: accentRed,
       fontFamily: 'Hind',
-      cardTheme: CardThemeData(
+      cardColor: surfaceDark,
+      cardTheme: CardTheme(
         color: surfaceDark,
         elevation: 0,
         shape: RoundedRectangleBorder(
