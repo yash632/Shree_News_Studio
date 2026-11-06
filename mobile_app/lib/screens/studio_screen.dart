@@ -9,6 +9,7 @@ import '../models/broadcast_config.dart';
 import '../services/ai_service.dart';
 import '../services/tts_service.dart';
 import '../services/video_engine_service.dart';
+import '../services/overlay_renderer_service.dart';
 
 class StudioScreen extends StatefulWidget {
   const StudioScreen({Key? key}) : super(key: key);
@@ -162,48 +163,27 @@ class _StudioScreenState extends State<StudioScreen> {
 
     setState(() {
       _isProcessing = true;
-      _progressValue = 0.05;
-      _progressStatus = "Taking 100% pixel-perfect snapshot of Web UI...";
+      _progressValue = 0.08;
+      _progressStatus = "Rendering broadcast graphics with authentic Hindi fonts...";
       _finalVideoPath = null;
     });
 
     try {
-      // 1. Capture exact Web UI overlay snapshot from WebView (with transparent frame center)
-      await _webViewController.runJavaScript('''
-        if (typeof window.prepareForOverlayExport === "function") {
-          window.prepareForOverlayExport();
-        } else {
-          document.body.style.background = "transparent";
-          var cv = document.getElementById("canvas");
-          if (cv) cv.style.background = "transparent";
-          var gl = document.querySelector(".glow");
-          if (gl) gl.style.display = "none";
-        }
-      ''');
-      await Future.delayed(const Duration(milliseconds: 150));
+      // 1. Generate high-fidelity broadcast overlay PNG (master web plate + HarfBuzz Hindi text)
+      _config.headlineText = _headlineController.text;
+      _config.subHeadline = _subHeadlineController.text;
+      _config.locationText = _locationController.text;
+      _config.tickerText = _tickerController.text;
 
-      final imageBytes = await _webViewController.takeScreenshot();
+      final isVertical = _config.aspectRatio == "9:16";
+      final targetW = isVertical ? 720 : 1280;
+      final targetH = isVertical ? 1280 : 720;
 
-      // Restore monitor background
-      await _webViewController.runJavaScript('''
-        if (typeof window.restoreAfterOverlayExport === "function") {
-          window.restoreAfterOverlayExport();
-        } else {
-          document.body.style.background = "#000";
-          var cv = document.getElementById("canvas");
-          if (cv) cv.style.background = "radial-gradient(ellipse at 50% 45%,#1b2a6b 0%,#0c1440 45%,#2a0a14 100%)";
-          var gl = document.querySelector(".glow");
-          if (gl) gl.style.display = "block";
-        }
-      ''');
-
-      if (imageBytes == null || imageBytes.isEmpty) {
-        throw Exception("Failed to capture Web UI monitor snapshot.");
-      }
-
-      final tempDir = await getTemporaryDirectory();
-      final overlayFile = File('${tempDir.path}/web_overlay_${DateTime.now().millisecondsSinceEpoch}.png');
-      await overlayFile.writeAsBytes(imageBytes);
+      final overlayPath = await OverlayRendererService.generateOverlay(
+        config: _config,
+        targetWidth: targetW,
+        targetHeight: targetH,
+      );
 
       // 2. Synthesize Hindi News Anchor Speech locally via Edge-TTS
       setState(() {
@@ -239,7 +219,7 @@ class _StudioScreenState extends State<StudioScreen> {
       final outputVideo = await VideoEngineService.renderVideo(
         videoPath: _selectedVideoPath!,
         audioPath: audioPath,
-        overlayPath: overlayFile.path,
+        overlayPath: overlayPath,
         config: _config,
         outroAudioPath: outroAudioPath,
         onProgress: (p, status) {
