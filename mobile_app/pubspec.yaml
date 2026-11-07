@@ -51,6 +51,8 @@ flutter:
   assets:
     - assets/master_broadcast_plate.png
     - assets/master_broadcast_plate_portrait.png
+    - assets/master_broadcast_plate_no_ticker.png
+    - assets/master_broadcast_plate_portrait_no_ticker.png
     - assets/web/
     - assets/web/fonts/
     - assets/web/static/

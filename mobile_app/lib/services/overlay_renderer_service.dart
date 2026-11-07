@@ -108,8 +108,12 @@ class OverlayRendererService {
   }) async {
     final isVertical = config.aspectRatio == "9:16";
     final plateAsset = isVertical
-        ? 'assets/master_broadcast_plate_portrait.png'
-        : 'assets/master_broadcast_plate.png';
+        ? (config.enableTicker
+            ? 'assets/master_broadcast_plate_portrait.png'
+            : 'assets/master_broadcast_plate_portrait_no_ticker.png')
+        : (config.enableTicker
+            ? 'assets/master_broadcast_plate.png'
+            : 'assets/master_broadcast_plate_no_ticker.png');
 
     final ui.Image plate = await _loadAssetImage(plateAsset);
 
@@ -579,7 +583,8 @@ class OverlayRendererService {
           maxLines: 2,
         );
         textPainter.layout(maxWidth: 540 * scaleX);
-        textPainter.paint(canvas, ui.Offset(377 * scaleX, 1210 * scaleY));
+        final double portHlY = (config.enableTicker ? 1210 : 1380) * scaleY;
+        textPainter.paint(canvas, ui.Offset(377 * scaleX, portHlY));
       }
 
       // Sub-Headline
@@ -599,7 +604,8 @@ class OverlayRendererService {
           ellipsis: '...',
         );
         subPainter.layout(maxWidth: 850 * scaleX);
-        subPainter.paint(canvas, ui.Offset(47 * scaleX, 1395 * scaleY));
+        final double portSubY = (config.enableTicker ? 1395 : 1563) * scaleY;
+        subPainter.paint(canvas, ui.Offset(47 * scaleX, portSubY));
       }
 
       // Ticker & DateTime in Portrait Mode
