@@ -31,11 +31,20 @@ jobs:
           # 1. Create pristine official app scaffold with Flutter 3.24.5
           flutter create -t app --org com.shreenews --project-name shree_news_studio clean_app
           
-          # 2. Transfer our code, assets and dependencies
+          # 2. Transfer our code, assets, custom manifest and launcher icons
           rm -rf clean_app/lib/*
           cp -r mobile_app/lib/* clean_app/lib/
           cp -r mobile_app/assets clean_app/
           cp mobile_app/pubspec.yaml clean_app/pubspec.yaml
+
+          # Copy custom AndroidManifest.xml (contains android:label="Shree News")
+          cp mobile_app/android/app/src/main/AndroidManifest.xml clean_app/android/app/src/main/AndroidManifest.xml
+
+          # Remove default flutter adaptive icons so Android strictly uses our custom ic_launcher PNGs
+          rm -rf clean_app/android/app/src/main/res/mipmap-anydpi-v26
+
+          # Copy custom launcher icons (golden sword "श्री" icon in all mipmap densities)
+          cp -r mobile_app/android/app/src/main/res/* clean_app/android/app/src/main/res/
 
           # 3. Configure Android SDK 35 & MinSDK 24
           echo "flutter.minSdkVersion=24" >> clean_app/android/local.properties

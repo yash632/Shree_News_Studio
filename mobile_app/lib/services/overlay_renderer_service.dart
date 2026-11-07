@@ -364,6 +364,7 @@ class OverlayRendererService {
                 Color(0xFFF2EEEE),
                 Color(0xFFDEDEDE),
               ],
+              const [0.0, 0.16, 0.45, 0.70, 1.0],
             ),
         );
 

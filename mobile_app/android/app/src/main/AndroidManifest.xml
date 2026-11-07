@@ -9,11 +9,15 @@
         android:label="Shree News"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="true"
         android:hardwareAccelerated="true">
         
         <activity
             android:name=".MainActivity"
+            android:label="Shree News"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher_round"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
