@@ -37,7 +37,10 @@ class OverlayRendererService {
     final availH = math.max(100.0, brkTop - topNavBottom);
     final centerVerticalY = math.max(0.0, topNavBottom + (availH - stdH) / 2.0);
 
-    double frameW, frameH, frameX, frameY;
+    double frameW = stdW;
+    double frameH = stdH;
+    double frameX = (1920.0 - stdW) / 2.0;
+    double frameY = centerVerticalY;
     double anchorX = 100.0;
 
     if (scaleVal >= 100.0) {
@@ -119,6 +122,18 @@ class OverlayRendererService {
     final double scaleX = targetWidth / (isVertical ? 941.0 : 1920.0);
     final double scaleY = targetHeight / (isVertical ? 1672.0 : 1080.0);
 
+    // Current time & date calculations
+    final now = DateTime.now();
+    final hour = now.hour % 12 == 0 ? 12 : now.hour % 12;
+    final minute = now.minute.toString().padLeft(2, '0');
+    final ampm = now.hour >= 12 ? 'PM' : 'AM';
+    final timeStr = "$hour:$minute $ampm";
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const hindiDays = ["रविवार", "सोमवार", "मंगलवार", "बुधवार", "गुरुवार", "शुक्रवार", "शनिवार"];
+    final dateStr = "${now.day.toString().padLeft(2, '0')} ${months[now.month - 1]} ${now.year}";
+    final dayStr = hindiDays[now.weekday % 7];
+
     // 1. Draw master broadcast plate
     final srcRect = ui.Rect.fromLTWH(0, 0, plate.width.toDouble(), plate.height.toDouble());
     final dstRect = ui.Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble());
@@ -161,7 +176,6 @@ class OverlayRendererService {
           ui.Paint()..blendMode = ui.BlendMode.clear,
         );
       } else {
-        // Draw 5 Sidebar Headlines
         for (int i = 0; i < math.min(5, config.sidebarItems.length); i++) {
           final itemText = config.sidebarItems[i].trim();
           if (itemText.isNotEmpty) {
@@ -250,7 +264,7 @@ class OverlayRendererService {
         locPainter.paint(canvas, ui.Offset(locX + 52 * scaleX, locY + 8 * scaleY));
       }
 
-      // 7. Main News Headline (Hind-Bold Devanagari)
+      // 7. Main News Headline
       if (config.headlineText.trim().isNotEmpty) {
         final double hlX = 545 * scaleX;
         final double hlY = (config.enableTicker ? 775 : 907) * scaleY;
@@ -303,17 +317,72 @@ class OverlayRendererService {
         subPainter.paint(canvas, ui.Offset(subX, subY));
       }
 
-      // 9. Bottom Ticker Bar Toggle
+      // 9. Bottom Ticker & DateTime Bars
       if (!config.enableTicker) {
         canvas.drawRect(
           ui.Rect.fromLTWH(0, 948 * scaleY, targetWidth.toDouble(), 132 * scaleY),
           ui.Paint()..blendMode = ui.BlendMode.clear,
         );
       } else {
-        // Draw Ticker Tag
+        // Clock & Date
+        if (config.enableDateTime) {
+          // Clear time/date slot and draw accurate values
+          canvas.drawRect(
+            ui.Rect.fromLTWH(30 * scaleX, 970 * scaleY, 215 * scaleX, 88 * scaleY),
+            ui.Paint()..color = const Color(0xFFE11D2A),
+          );
+          final timePainter = TextPainter(
+            text: TextSpan(
+              text: timeStr,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 34 * scaleY,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'Hind',
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          timePainter.layout();
+          timePainter.paint(canvas, ui.Offset(48 * scaleX, 988 * scaleY));
+
+          canvas.drawRect(
+            ui.Rect.fromLTWH(245 * scaleX, 970 * scaleY, 200 * scaleX, 88 * scaleY),
+            ui.Paint()..color = Colors.white,
+          );
+          final datePainter = TextPainter(
+            text: TextSpan(
+              text: "$dateStr\n$dayStr",
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 20 * scaleY,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Hind',
+                height: 1.15,
+              ),
+            ),
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.ltr,
+          );
+          datePainter.layout(maxWidth: 190 * scaleX);
+          datePainter.paint(canvas, ui.Offset(250 * scaleX, 978 * scaleY));
+        } else {
+          // Hide time and date boxes
+          canvas.drawRect(
+            ui.Rect.fromLTWH(0, 948 * scaleY, 445 * scaleX, 132 * scaleY),
+            ui.Paint()..blendMode = ui.BlendMode.clear,
+          );
+        }
+
+        // Draw Ticker Tag (Red Box)
+        final tagText = config.tickerTag.isNotEmpty ? config.tickerTag : "ताजा खबर";
+        canvas.drawRect(
+          ui.Rect.fromLTWH(445 * scaleX, 970 * scaleY, 250 * scaleX, 88 * scaleY),
+          ui.Paint()..color = const Color(0xFFE11D2A),
+        );
         final tagPainter = TextPainter(
           text: TextSpan(
-            text: config.tickerTag,
+            text: tagText,
             style: TextStyle(
               color: Colors.white,
               fontSize: 34 * scaleY,
@@ -322,19 +391,25 @@ class OverlayRendererService {
             ),
           ),
           textDirection: TextDirection.ltr,
-          maxLines: 1,
         );
         tagPainter.layout();
-        tagPainter.paint(canvas, ui.Offset(460 * scaleX, 985 * scaleY));
+        tagPainter.paint(canvas, ui.Offset(470 * scaleX, 988 * scaleY));
 
-        // Draw Ticker Text
+        // Draw Ticker Text (Dark Blue Strip)
+        final tText = config.tickerText.isNotEmpty
+            ? config.tickerText
+            : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
+        canvas.drawRect(
+          ui.Rect.fromLTWH(695 * scaleX, 970 * scaleY, (1920 - 695) * scaleX, 88 * scaleY),
+          ui.Paint()..color = const Color(0xFF0F1E4A),
+        );
         final tickerPainter = TextPainter(
           text: TextSpan(
-            text: config.tickerText,
+            text: tText,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 28 * scaleY,
-              fontWeight: FontWeight.w600,
+              fontSize: 30 * scaleY,
+              fontWeight: FontWeight.w700,
               fontFamily: 'Hind',
             ),
           ),
@@ -342,18 +417,17 @@ class OverlayRendererService {
           maxLines: 1,
           ellipsis: '...',
         );
-        tickerPainter.layout(maxWidth: 1180 * scaleX);
-        tickerPainter.paint(canvas, ui.Offset(720 * scaleX, 990 * scaleY));
+        tickerPainter.layout(maxWidth: (1920 - 720) * scaleX);
+        tickerPainter.paint(canvas, ui.Offset(715 * scaleX, 990 * scaleY));
       }
     } else {
       // 9:16 Portrait Mode
-      // Clear central video frame hole
       final topBound = config.enableTopBar ? 340.0 : 20.0;
       final bottomBound = config.enableTicker ? 1150.0 : 1320.0;
       final availH = bottomBound - topBound;
       final scaleVal = config.frameScale;
       final scale = scaleVal / 100.0;
-      final stdW = 898.0;
+      const stdW = 898.0;
       final stdH = math.min(717.0, availH * 0.88);
 
       double w, h;
@@ -463,12 +537,68 @@ class OverlayRendererService {
         subPainter.paint(canvas, ui.Offset(47 * scaleX, 1395 * scaleY));
       }
 
-      // Ticker Toggle
+      // Ticker & DateTime in Portrait Mode
       if (!config.enableTicker) {
         canvas.drawRect(
           ui.Rect.fromLTWH(0, 1450 * scaleY, targetWidth.toDouble(), 220 * scaleY),
           ui.Paint()..blendMode = ui.BlendMode.clear,
         );
+      } else {
+        // Date & Time in Portrait
+        if (config.enableDateTime) {
+          final timePainter = TextPainter(
+            text: TextSpan(
+              text: timeStr,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 26 * scaleY,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'Hind',
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          timePainter.layout();
+          timePainter.paint(canvas, ui.Offset(30 * scaleX, 1555 * scaleY));
+        }
+
+        // Ticker Tag in Portrait
+        final tagText = config.tickerTag.isNotEmpty ? config.tickerTag : "ताजा खबर";
+        final tagPainter = TextPainter(
+          text: TextSpan(
+            text: tagText,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 28 * scaleY,
+              fontWeight: FontWeight.w900,
+              fontFamily: 'Hind',
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        );
+        tagPainter.layout();
+        tagPainter.paint(canvas, ui.Offset((config.enableDateTime ? 150 : 25) * scaleX, 1555 * scaleY));
+
+        // Ticker Text in Portrait
+        final tText = config.tickerText.isNotEmpty
+            ? config.tickerText
+            : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
+        final tickerPainter = TextPainter(
+          text: TextSpan(
+            text: tText,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 24 * scaleY,
+              fontWeight: FontWeight.w700,
+              fontFamily: 'Hind',
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+          ellipsis: '...',
+        );
+        tickerPainter.layout(maxWidth: 580 * scaleX);
+        tickerPainter.paint(canvas, ui.Offset((config.enableDateTime ? 340 : 210) * scaleX, 1558 * scaleY));
       }
     }
 

@@ -1,19 +1,44 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 
 class TtsService {
-  // Current official Microsoft Azure / Edge TTS WebSocket endpoint and key
+  // Official Microsoft Edge Neural TTS endpoint key & trusted token
   static const String endpointKey = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+  static const String trustedClientToken = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
   static const String wssUrl =
       "wss://api.msedgeservices.com/tts/cognitiveservices/websocket/v1?Ocp-Apim-Subscription-Key=$endpointKey";
 
+  /// Generates the Microsoft DRM Sec-MS-GEC token required by Edge TTS
+  static String _generateSecMsGec() {
+    const winEpoch = 11644473600;
+    final nowSeconds = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    var ticks = nowSeconds + winEpoch;
+    ticks -= (ticks % 300); // 5-minute window
+    final strToHash = "${ticks * 10000000}$trustedClientToken";
+    return sha256.convert(ascii.encode(strToHash)).toString().toUpperCase();
+  }
+
+  static String _generateConnectionId() {
+    final rand = Random();
+    final bytes = List<int>.generate(16, (_) => rand.nextInt(256));
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static String _getTimestamp() {
+    final now = DateTime.now().toUtc();
+    return "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}T"
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}Z";
+  }
+
   /// Generates natural Hindi speech audio.
-  /// Tries Microsoft Edge Neural WebSocket first; seamlessly falls back to Google Hindi TTS
-  /// so that speech synthesis NEVER fails and never throws an unhandled WebSocketException.
+  /// Uses authentic Microsoft Edge Neural TTS (Madhur / Swara / Andrew);
+  /// falls back to Google TTS only in case of complete offline outage.
   static Future<String> generateSpeech({
     required String text,
     String voice = 'hi-IN-MadhurNeural',
@@ -56,12 +81,10 @@ class TtsService {
             }
           }
         }
-      } catch (_) {
-        // Fall back to direct synthesizers
-      }
+      } catch (_) {}
     }
 
-    // 2. Try Microsoft Edge Neural WebSocket
+    // 2. Microsoft Edge Neural WebSocket with DRM Sec-MS-GEC Authentication
     String rateStr = '+0%';
     if (speed != 1.0) {
       final pct = ((speed - 1.0) * 100).round();
@@ -79,14 +102,14 @@ class TtsService {
         return edgeAudio;
       }
     } catch (e) {
-      print('Edge TTS WebSocket unavailable ($e), switching to Google Hindi TTS...');
+      print('Edge TTS WebSocket attempt failed ($e), using Google Hindi TTS...');
     }
 
-    // 3. Guaranteed High-Speed Fallback: Google Hindi Neural TTS (HTTP GET)
+    // 3. Fallback: Google Hindi TTS
     return await _generateGoogleHindiTts(text, outputFile);
   }
 
-  /// Synthesizes neural voice via Edge TTS WebSocket with required 'synthesize' subprotocol
+  /// Synthesizes neural voice via Edge TTS WebSocket using Sec-MS-GEC DRM authentication
   static Future<String?> _generateEdgeTts({
     required String text,
     required String voice,
@@ -97,8 +120,13 @@ class TtsService {
     final audioChunks = <int>[];
 
     try {
+      final connId = _generateConnectionId();
+      final secMsGec = _generateSecMsGec();
+      final connectUrl =
+          "$wssUrl&ConnectionId=$connId&Sec-MS-GEC=$secMsGec&Sec-MS-GEC-Version=1-140.0.3485.14";
+
       final socket = await WebSocket.connect(
-        wssUrl,
+        connectUrl,
         protocols: ['synthesize'],
         headers: {
           'Pragma': 'no-cache',
@@ -107,14 +135,17 @@ class TtsService {
           'User-Agent':
               'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0',
         },
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 10));
 
-      final reqId = DateTime.now().millisecondsSinceEpoch.toString();
+      final reqId = _generateConnectionId();
+      final timeStr = _getTimestamp();
 
       // Step A: Send Speech Config
-      const configMsg =
-          "Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n"
-          '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-96kbitrate-mono-mp3"}}}}';
+      final configMsg =
+          "X-Timestamp:$timeStr\r\n"
+          "Content-Type:application/json; charset=utf-8\r\n"
+          "Path:speech.config\r\n\r\n"
+          '{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}';
       socket.add(configMsg);
 
       // Step B: Send SSML
@@ -123,7 +154,10 @@ class TtsService {
           "<voice name='$voice'><prosody rate='$rateStr'>${_escapeXml(text)}</prosody></voice></speak>";
 
       final ssmlMsg =
-          "X-RequestId:$reqId\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n$ssml";
+          "X-RequestId:$reqId\r\n"
+          "X-Timestamp:$timeStr\r\n"
+          "Content-Type:application/ssml+xml\r\n"
+          "Path:ssml\r\n\r\n$ssml";
       socket.add(ssmlMsg);
 
       // Step C: Listen for Audio Binary Packets
@@ -169,15 +203,16 @@ class TtsService {
       );
 
       return await completer.future.timeout(
-        const Duration(seconds: 15),
+        const Duration(seconds: 20),
         onTimeout: () => null,
       );
-    } catch (_) {
+    } catch (e) {
+      print("Edge TTS direct WebSocket error: $e");
       return null;
     }
   }
 
-  /// Instant, rock-solid Google Hindi Neural TTS fallback over pure HTTPS
+  /// Instant Google Hindi TTS fallback
   static Future<String> _generateGoogleHindiTts(String text, File outputFile) async {
     final chunks = <String>[];
     final parts = text.split(RegExp(r'([।!?,\n]+)'));
@@ -208,9 +243,7 @@ class TtsService {
         if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
           allAudioBytes.addAll(res.bodyBytes);
         }
-      } catch (e) {
-        print('Google TTS chunk error: $e');
-      }
+      } catch (_) {}
     }
     client.close();
 

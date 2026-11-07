@@ -78,7 +78,84 @@ class _StudioScreenState extends State<StudioScreen> {
     }
 
     LocalVideoServer.ensureStarted();
-    _initWebView();
+    _loadSettings().then((_) {
+      _initWebView();
+    });
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/user_settings.json');
+      if (await file.exists()) {
+        final Map<String, dynamic> json = jsonDecode(await file.readAsString());
+        setState(() {
+          if (json['headlineText'] != null) _headlineController.text = json['headlineText'];
+          if (json['subHeadline'] != null) _subHeadlineController.text = json['subHeadline'];
+          if (json['locationText'] != null) _locationController.text = json['locationText'];
+          if (json['tickerTag'] != null) _tickerTagController.text = json['tickerTag'];
+          if (json['tickerText'] != null) _tickerController.text = json['tickerText'];
+          if (json['scriptText'] != null) _scriptController.text = json['scriptText'];
+          if (json['outroText'] != null) _outroController.text = json['outroText'];
+          if (json['aspectRatio'] != null) _config.aspectRatio = json['aspectRatio'];
+          if (json['frameScale'] != null) _config.frameScale = (json['frameScale'] as num).toDouble();
+          if (json['enableTopBar'] != null) _config.enableTopBar = json['enableTopBar'];
+          if (json['enableSidebar'] != null) _config.enableSidebar = json['enableSidebar'];
+          if (json['enableLocation'] != null) _config.enableLocation = json['enableLocation'];
+          if (json['enableDateTime'] != null) _config.enableDateTime = json['enableDateTime'];
+          if (json['enableAnchor'] != null) _config.enableAnchor = json['enableAnchor'];
+          if (json['enableTicker'] != null) _config.enableTicker = json['enableTicker'];
+          if (json['audioMixMode'] != null) _config.audioMixMode = json['audioMixMode'];
+          if (json['footageVolume'] != null) _config.footageVolume = (json['footageVolume'] as num).toDouble();
+          if (json['groundClipDuration'] != null) _config.groundClipDuration = (json['groundClipDuration'] as num).toDouble();
+          if (json['muteDuringAnchor'] != null) _config.muteDuringAnchor = json['muteDuringAnchor'];
+          if (json['restartFootage'] != null) _config.restartFootage = json['restartFootage'];
+          if (json['restartOutroFootage'] != null) _config.restartOutroFootage = json['restartOutroFootage'];
+          if (json['selectedVoice'] != null) _selectedVoice = json['selectedVoice'];
+          if (json['ttsSpeed'] != null) _ttsSpeed = (json['ttsSpeed'] as num).toDouble();
+          if (json['sidebarItems'] != null && json['sidebarItems'] is List) {
+            final items = List<String>.from(json['sidebarItems']);
+            for (int i = 0; i < 5 && i < items.length; i++) {
+              _sidebarControllers[i].text = items[i];
+            }
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveSettings() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/user_settings.json');
+      final data = {
+        'headlineText': _headlineController.text,
+        'subHeadline': _subHeadlineController.text,
+        'locationText': _locationController.text,
+        'tickerTag': _tickerTagController.text,
+        'tickerText': _tickerController.text,
+        'scriptText': _scriptController.text,
+        'outroText': _outroController.text,
+        'aspectRatio': _config.aspectRatio,
+        'frameScale': _config.frameScale,
+        'enableTopBar': _config.enableTopBar,
+        'enableSidebar': _config.enableSidebar,
+        'enableLocation': _config.enableLocation,
+        'enableDateTime': _config.enableDateTime,
+        'enableAnchor': _config.enableAnchor,
+        'enableTicker': _config.enableTicker,
+        'audioMixMode': _config.audioMixMode,
+        'footageVolume': _config.footageVolume,
+        'groundClipDuration': _config.groundClipDuration,
+        'muteDuringAnchor': _config.muteDuringAnchor,
+        'restartFootage': _config.restartFootage,
+        'restartOutroFootage': _config.restartOutroFootage,
+        'selectedVoice': _selectedVoice,
+        'ttsSpeed': _ttsSpeed,
+        'sidebarItems': _sidebarControllers.map((c) => c.text).toList(),
+      };
+      await file.writeAsString(jsonEncode(data));
+    } catch (_) {}
   }
 
   @override
@@ -165,6 +242,7 @@ class _StudioScreenState extends State<StudioScreen> {
 
     final jsCall = 'if (window.setPreviewData) { window.setPreviewData(${jsonEncode(data)}); }';
     _webViewController.runJavaScript(jsCall);
+    _saveSettings();
   }
 
   Future<void> _pickVideo() async {
