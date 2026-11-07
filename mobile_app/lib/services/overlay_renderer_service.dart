@@ -261,6 +261,26 @@ class OverlayRendererService {
           pinRedPaint,
         );
 
+        // Draw authentic White Map Pin SVG Icon inside the red box
+        final pinCenterX = locX + 22 * scaleX;
+        final pinCenterY = locY + 18 * scaleY;
+        canvas.drawCircle(
+          ui.Offset(pinCenterX, pinCenterY),
+          8 * scaleX,
+          ui.Paint()..color = Colors.white,
+        );
+        final pinPath = ui.Path()
+          ..moveTo(pinCenterX - 7 * scaleX, pinCenterY + 4 * scaleY)
+          ..lineTo(pinCenterX + 7 * scaleX, pinCenterY + 4 * scaleY)
+          ..lineTo(pinCenterX, pinCenterY + 16 * scaleY)
+          ..close();
+        canvas.drawPath(pinPath, ui.Paint()..color = Colors.white);
+        canvas.drawCircle(
+          ui.Offset(pinCenterX, pinCenterY),
+          3.5 * scaleX,
+          ui.Paint()..color = const Color(0xFFC4121F),
+        );
+
         locPainter.paint(canvas, ui.Offset(locX + 52 * scaleX, locY + 8 * scaleY));
       }
 
@@ -317,18 +337,44 @@ class OverlayRendererService {
         subPainter.paint(canvas, ui.Offset(subX, subY));
       }
 
-      // 9. Bottom Ticker & DateTime Bars
+      // 9. Bottom Ticker & DateTime Bars (Seamless Dynamic Alignment matching web)
       if (!config.enableTicker) {
         canvas.drawRect(
           ui.Rect.fromLTWH(0, 948 * scaleY, targetWidth.toDouble(), 132 * scaleY),
           ui.Paint()..blendMode = ui.BlendMode.clear,
         );
       } else {
-        // Clock & Date
-        if (config.enableDateTime) {
-          // Clear time/date slot and draw accurate values
-          canvas.drawRect(
-            ui.Rect.fromLTWH(30 * scaleX, 970 * scaleY, 215 * scaleX, 88 * scaleY),
+        final bool showDT = config.enableDateTime;
+        final double tagLeft = showDT ? 445 * scaleX : 28 * scaleX;
+        final double tagWidth = showDT ? 250 * scaleX : 260 * scaleX;
+        final double tickerLeft = showDT ? 695 * scaleX : 288 * scaleX;
+        final double tickerWidth = showDT ? (1920 - 695) * scaleX : (1920 - 288) * scaleX;
+
+        // Draw Under Silver Bar background
+        canvas.drawRect(
+          ui.Rect.fromLTWH(0, 948 * scaleY, 1920 * scaleX, 132 * scaleY),
+          ui.Paint()
+            ..shader = ui.Gradient.linear(
+              ui.Offset(0, 948 * scaleY),
+              ui.Offset(1920 * scaleX, 948 * scaleY),
+              const [
+                Color(0xFFD6D4D4),
+                Color(0xFFE9C0CC),
+                Color(0xFFFAF1F2),
+                Color(0xFFF2EEEE),
+                Color(0xFFDEDEDE),
+              ],
+            ),
+        );
+
+        if (showDT) {
+          // Time Box
+          canvas.drawRRect(
+            ui.RRect.fromRectAndCorners(
+              ui.Rect.fromLTWH(30 * scaleX, 970 * scaleY, 215 * scaleX, 88 * scaleY),
+              topLeft: ui.Radius.circular(12 * scaleX),
+              bottomLeft: ui.Radius.circular(12 * scaleX),
+            ),
             ui.Paint()..color = const Color(0xFFE11D2A),
           );
           final timePainter = TextPainter(
@@ -346,6 +392,7 @@ class OverlayRendererService {
           timePainter.layout();
           timePainter.paint(canvas, ui.Offset(48 * scaleX, 988 * scaleY));
 
+          // Date Box
           canvas.drawRect(
             ui.Rect.fromLTWH(245 * scaleX, 970 * scaleY, 200 * scaleX, 88 * scaleY),
             ui.Paint()..color = Colors.white,
@@ -366,18 +413,15 @@ class OverlayRendererService {
           );
           datePainter.layout(maxWidth: 190 * scaleX);
           datePainter.paint(canvas, ui.Offset(250 * scaleX, 978 * scaleY));
-        } else {
-          // Hide time and date boxes
-          canvas.drawRect(
-            ui.Rect.fromLTWH(0, 948 * scaleY, 445 * scaleX, 132 * scaleY),
-            ui.Paint()..blendMode = ui.BlendMode.clear,
-          );
         }
 
-        // Draw Ticker Tag (Red Box)
+        // Ticker Tag (Red Box)
         final tagText = config.tickerTag.isNotEmpty ? config.tickerTag : "ताजा खबर";
-        canvas.drawRect(
-          ui.Rect.fromLTWH(445 * scaleX, 970 * scaleY, 250 * scaleX, 88 * scaleY),
+        canvas.drawRRect(
+          ui.RRect.fromRectAndRadius(
+            ui.Rect.fromLTWH(tagLeft, 970 * scaleY, tagWidth, 88 * scaleY),
+            ui.Radius.circular(showDT ? 0 : 8 * scaleX),
+          ),
           ui.Paint()..color = const Color(0xFFE11D2A),
         );
         final tagPainter = TextPainter(
@@ -393,14 +437,14 @@ class OverlayRendererService {
           textDirection: TextDirection.ltr,
         );
         tagPainter.layout();
-        tagPainter.paint(canvas, ui.Offset(470 * scaleX, 988 * scaleY));
+        tagPainter.paint(canvas, ui.Offset(tagLeft + 25 * scaleX, 988 * scaleY));
 
-        // Draw Ticker Text (Dark Blue Strip)
+        // Ticker Text (Dark Blue Strip)
         final tText = config.tickerText.isNotEmpty
             ? config.tickerText
             : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
         canvas.drawRect(
-          ui.Rect.fromLTWH(695 * scaleX, 970 * scaleY, (1920 - 695) * scaleX, 88 * scaleY),
+          ui.Rect.fromLTWH(tickerLeft, 970 * scaleY, tickerWidth, 88 * scaleY),
           ui.Paint()..color = const Color(0xFF0F1E4A),
         );
         final tickerPainter = TextPainter(
@@ -417,8 +461,8 @@ class OverlayRendererService {
           maxLines: 1,
           ellipsis: '...',
         );
-        tickerPainter.layout(maxWidth: (1920 - 720) * scaleX);
-        tickerPainter.paint(canvas, ui.Offset(715 * scaleX, 990 * scaleY));
+        tickerPainter.layout(maxWidth: tickerWidth - (40 * scaleX));
+        tickerPainter.paint(canvas, ui.Offset(tickerLeft + 20 * scaleX, 992 * scaleY));
       }
     } else {
       // 9:16 Portrait Mode
@@ -495,6 +539,26 @@ class OverlayRendererService {
           pinRedPaint,
         );
 
+        // Draw authentic White Map Pin SVG Icon inside the red box
+        final pinCenterX = locX + 22 * scaleX;
+        final pinCenterY = locY + 20 * scaleY;
+        canvas.drawCircle(
+          ui.Offset(pinCenterX, pinCenterY),
+          8 * scaleX,
+          ui.Paint()..color = Colors.white,
+        );
+        final pinPath = ui.Path()
+          ..moveTo(pinCenterX - 7 * scaleX, pinCenterY + 4 * scaleY)
+          ..lineTo(pinCenterX + 7 * scaleX, pinCenterY + 4 * scaleY)
+          ..lineTo(pinCenterX, pinCenterY + 16 * scaleY)
+          ..close();
+        canvas.drawPath(pinPath, ui.Paint()..color = Colors.white);
+        canvas.drawCircle(
+          ui.Offset(pinCenterX, pinCenterY),
+          3.5 * scaleX,
+          ui.Paint()..color = const Color(0xFFC4121F),
+        );
+
         locPainter.paint(canvas, ui.Offset(locX + 50 * scaleX, locY + 10 * scaleY));
       }
 
@@ -544,14 +608,37 @@ class OverlayRendererService {
           ui.Paint()..blendMode = ui.BlendMode.clear,
         );
       } else {
-        // Date & Time in Portrait
-        if (config.enableDateTime) {
+        final bool showDT = config.enableDateTime;
+        final double tagLeft = showDT ? 268 * scaleX : 15 * scaleX;
+        final double tagWidth = showDT ? 168 * scaleX : 200 * scaleX;
+        final double tickerLeft = showDT ? 436 * scaleX : 215 * scaleX;
+        final double tickerWidth = showDT ? 481 * scaleX : 711 * scaleX;
+
+        // Draw ticker bar container
+        canvas.drawRRect(
+          ui.RRect.fromRectAndRadius(
+            ui.Rect.fromLTWH(15 * scaleX, 1538 * scaleY, 917 * scaleX, 88 * scaleY),
+            ui.Radius.circular(12 * scaleX),
+          ),
+          ui.Paint()..color = const Color(0xFF011C3D),
+        );
+
+        if (showDT) {
+          // Time box
+          canvas.drawRRect(
+            ui.RRect.fromRectAndCorners(
+              ui.Rect.fromLTWH(15 * scaleX, 1538 * scaleY, 130 * scaleX, 88 * scaleY),
+              topLeft: ui.Radius.circular(12 * scaleX),
+              bottomLeft: ui.Radius.circular(12 * scaleX),
+            ),
+            ui.Paint()..color = const Color(0xFFE03030),
+          );
           final timePainter = TextPainter(
             text: TextSpan(
               text: timeStr,
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 26 * scaleY,
+                fontSize: 22 * scaleY,
                 fontWeight: FontWeight.w800,
                 fontFamily: 'Hind',
               ),
@@ -559,17 +646,47 @@ class OverlayRendererService {
             textDirection: TextDirection.ltr,
           );
           timePainter.layout();
-          timePainter.paint(canvas, ui.Offset(30 * scaleX, 1555 * scaleY));
+          timePainter.paint(canvas, ui.Offset(25 * scaleX, 1568 * scaleY));
+
+          // Date box
+          canvas.drawRect(
+            ui.Rect.fromLTWH(145 * scaleX, 1538 * scaleY, 123 * scaleX, 88 * scaleY),
+            ui.Paint()..color = Colors.white,
+          );
+          final datePainter = TextPainter(
+            text: TextSpan(
+              text: "$dateStr\n$dayStr",
+              style: TextStyle(
+                color: Colors.black,
+                fontSize: 16 * scaleY,
+                fontWeight: FontWeight.w700,
+                fontFamily: 'Hind',
+                height: 1.1,
+              ),
+            ),
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.ltr,
+          );
+          datePainter.layout(maxWidth: 115 * scaleX);
+          datePainter.paint(canvas, ui.Offset(148 * scaleX, 1558 * scaleY));
         }
 
-        // Ticker Tag in Portrait
+        // Ticker Tag
         final tagText = config.tickerTag.isNotEmpty ? config.tickerTag : "ताजा खबर";
+        canvas.drawRRect(
+          ui.RRect.fromRectAndCorners(
+            ui.Rect.fromLTWH(tagLeft, 1538 * scaleY, tagWidth, 88 * scaleY),
+            topLeft: ui.Radius.circular(showDT ? 0 : 12 * scaleX),
+            bottomLeft: ui.Radius.circular(showDT ? 0 : 12 * scaleX),
+          ),
+          ui.Paint()..color = const Color(0xFFE03030),
+        );
         final tagPainter = TextPainter(
           text: TextSpan(
             text: tagText,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 28 * scaleY,
+              fontSize: 26 * scaleY,
               fontWeight: FontWeight.w900,
               fontFamily: 'Hind',
             ),
@@ -577,9 +694,9 @@ class OverlayRendererService {
           textDirection: TextDirection.ltr,
         );
         tagPainter.layout();
-        tagPainter.paint(canvas, ui.Offset((config.enableDateTime ? 150 : 25) * scaleX, 1555 * scaleY));
+        tagPainter.paint(canvas, ui.Offset(tagLeft + 18 * scaleX, 1566 * scaleY));
 
-        // Ticker Text in Portrait
+        // Ticker Text
         final tText = config.tickerText.isNotEmpty
             ? config.tickerText
             : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
@@ -597,8 +714,8 @@ class OverlayRendererService {
           maxLines: 1,
           ellipsis: '...',
         );
-        tickerPainter.layout(maxWidth: 580 * scaleX);
-        tickerPainter.paint(canvas, ui.Offset((config.enableDateTime ? 340 : 210) * scaleX, 1558 * scaleY));
+        tickerPainter.layout(maxWidth: tickerWidth - 25 * scaleX);
+        tickerPainter.paint(canvas, ui.Offset(tickerLeft + 15 * scaleX, 1566 * scaleY));
       }
     }
 

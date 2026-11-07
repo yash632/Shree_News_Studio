@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_file/open_file.dart';
@@ -50,6 +51,8 @@ class _StudioScreenState extends State<StudioScreen> {
   String _audioMode = "tts"; // "tts" or "upload"
   String _selectedVoice = 'hi-IN-MadhurNeural';
   double _ttsSpeed = 1.0;
+  String _selectedAiProvider = 'groq';
+  String _selectedAiModel = 'qwen/qwen3.8-27b';
 
   bool _isProcessing = false;
   double _progressValue = 0.0;
@@ -113,6 +116,8 @@ class _StudioScreenState extends State<StudioScreen> {
           if (json['restartOutroFootage'] != null) _config.restartOutroFootage = json['restartOutroFootage'];
           if (json['selectedVoice'] != null) _selectedVoice = json['selectedVoice'];
           if (json['ttsSpeed'] != null) _ttsSpeed = (json['ttsSpeed'] as num).toDouble();
+          if (json['aiModel'] != null) _selectedAiModel = json['aiModel'];
+          if (json['aiProvider'] != null) _selectedAiProvider = json['aiProvider'];
           if (json['sidebarItems'] != null && json['sidebarItems'] is List) {
             final items = List<String>.from(json['sidebarItems']);
             for (int i = 0; i < 5 && i < items.length; i++) {
@@ -152,6 +157,8 @@ class _StudioScreenState extends State<StudioScreen> {
         'restartOutroFootage': _config.restartOutroFootage,
         'selectedVoice': _selectedVoice,
         'ttsSpeed': _ttsSpeed,
+        'aiModel': _selectedAiModel,
+        'aiProvider': _selectedAiProvider,
         'sidebarItems': _sidebarControllers.map((c) => c.text).toList(),
       };
       await file.writeAsString(jsonEncode(data));
@@ -179,7 +186,15 @@ class _StudioScreenState extends State<StudioScreen> {
   void _initWebView() {
     _webViewController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(Colors.transparent)
+      ..setBackgroundColor(Colors.transparent);
+
+    if (_webViewController.platform is AndroidWebViewController) {
+      AndroidWebViewController.enableDebugging(true);
+      (_webViewController.platform as AndroidWebViewController)
+          .setMediaPlaybackRequiresUserGesture(false);
+    }
+
+    _webViewController
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (String url) {
@@ -320,31 +335,108 @@ class _StudioScreenState extends State<StudioScreen> {
   Future<void> _generateScript() async {
     setState(() {
       _isProcessing = true;
-      _progressStatus = "AI न्यूज़ एंकर स्क्रिप्ट लिख रहा है...";
+      _progressStatus = "AI न्यूज़ बुलेटिन और स्क्रिप्ट तैयार कर रहा है...";
     });
 
     try {
-      final script = await AiService.generateNewsScript(
+      final bundle = await AiService.generateNewsBroadcastPackage(
         topic: _topicController.text,
         apiKey: _apiKeyController.text.trim(),
+        provider: _selectedAiProvider,
+        model: _selectedAiModel,
       );
 
       setState(() {
-        _scriptController.text = script;
+        _headlineController.text = bundle.headline;
+        _subHeadlineController.text = bundle.subHeadline;
+        _tickerController.text = bundle.ticker;
+        _scriptController.text = bundle.script;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('एंकर स्क्रिप्ट तैयार हो गई!')),
-      );
+      _syncConfigToWeb();
+      await _saveSettings();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🎉 हेडलाइन, सब-हेडलाइन, टिकर और स्क्रिप्ट तैयार हो गई!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Script info: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('AI Generation Info: $e')),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-        _progressStatus = "";
-      });
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _progressStatus = "";
+        });
+      }
+    }
+  }
+
+  Future<void> _saveVideoToDownloads() async {
+    if (_finalVideoPath == null || !File(_finalVideoPath!).existsSync()) return;
+    try {
+      Directory? targetDir;
+      if (Platform.isAndroid) {
+        targetDir = Directory('/storage/emulated/0/Download/ShreeNews');
+        if (!targetDir.existsSync()) {
+          targetDir.createSync(recursive: true);
+        }
+      } else {
+        targetDir = await getApplicationDocumentsDirectory();
+      }
+
+      final fileName = 'ShreeNews_${DateTime.now().millisecondsSinceEpoch}.mp4';
+      final destPath = '${targetDir.path}/$fileName';
+      await File(_finalVideoPath!).copy(destPath);
+
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.greenAccent),
+                SizedBox(width: 8),
+                Text('Video Saved!', style: TextStyle(color: Colors.white, fontSize: 16)),
+              ],
+            ),
+            content: Text(
+              'वीडियो आपके फोन के Downloads/ShreeNews फोल्डर में सुरक्षित सेव हो गई है:\n\n$destPath',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  OpenFile.open(destPath);
+                },
+                child: const Text('OPEN SAVED VIDEO',
+                    style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Save error: $e')),
+        );
+      }
     }
   }
 
@@ -511,7 +603,7 @@ class _StudioScreenState extends State<StudioScreen> {
               style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18),
             ),
             Text(
-              'STUDIO',
+              '24x7',
               style: TextStyle(fontWeight: FontWeight.w900, color: Colors.redAccent, fontSize: 18),
             ),
           ],
@@ -876,12 +968,53 @@ class _StudioScreenState extends State<StudioScreen> {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
-                      Text(
-                        "AI Script Writer",
+                    children: [
+                      const Text(
+                        "AI Script & Elements Writer",
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
-                      Text("Qwen / Llama 3.3", style: TextStyle(color: Colors.white54, fontSize: 10)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E293B),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: const Color(0xFF334155)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedAiModel,
+                            dropdownColor: const Color(0xFF0F172A),
+                            isDense: true,
+                            style: const TextStyle(color: Colors.white, fontSize: 11),
+                            items: const [
+                              DropdownMenuItem(
+                                value: "qwen/qwen3.8-27b",
+                                child: Text("Groq (Qwen 3.8 - Recommended)"),
+                              ),
+                              DropdownMenuItem(
+                                value: "openai/gpt-oss-120b",
+                                child: Text("Groq (GPT-OSS 120B)"),
+                              ),
+                              DropdownMenuItem(
+                                value: "llama-3.3-70b-versatile",
+                                child: Text("Groq (Llama 3.3 70B)"),
+                              ),
+                              DropdownMenuItem(
+                                value: "mistral-small-latest",
+                                child: Text("Mistral (Small)"),
+                              ),
+                            ],
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() {
+                                  _selectedAiModel = val;
+                                  _selectedAiProvider = val.contains("mistral") ? "mistral" : "groq";
+                                });
+                              }
+                            },
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -892,7 +1025,7 @@ class _StudioScreenState extends State<StudioScreen> {
                           controller: _topicController,
                           style: const TextStyle(color: Colors.white, fontSize: 13),
                           decoration: InputDecoration(
-                            hintText: "विषय लिखें (e.g. भोपाल में भारी बारिश)...",
+                            hintText: "विषय लिखें (e.g. भोपाल में भारी बारिश / गधे ने मारी लात)...",
                             hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
                             filled: true,
                             fillColor: const Color(0xFF1E293B),
@@ -905,7 +1038,7 @@ class _StudioScreenState extends State<StudioScreen> {
                       ElevatedButton.icon(
                         onPressed: _isProcessing ? null : _generateScript,
                         icon: const Icon(Icons.auto_awesome, size: 16),
-                        label: const Text("Write", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        label: const Text("Write Script", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFFA855F7),
                           foregroundColor: Colors.white,
@@ -1723,21 +1856,44 @@ class _StudioScreenState extends State<StudioScreen> {
                   ],
                 ),
                 const SizedBox(height: 14),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    OpenFile.open(_finalVideoPath!);
-                  },
-                  icon: const Icon(Icons.download_rounded, size: 22),
-                  label: const Text(
-                    "DOWNLOAD / OPEN BROADCAST VIDEO",
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.greenAccent.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _saveVideoToDownloads,
+                        icon: const Icon(Icons.download_rounded, size: 20),
+                        label: const Text(
+                          "SAVE TO DOWNLOADS",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.greenAccent.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          OpenFile.open(_finalVideoPath!);
+                        },
+                        icon: const Icon(Icons.play_circle_fill, size: 20),
+                        label: const Text(
+                          "OPEN VIDEO",
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF3B82F6),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -347,16 +347,39 @@ window.setPreviewData = function(data) {
   if (locBox) locBox.style.display = showLoc ? 'flex' : 'none';
 
   const tm = $('time');
-  if (tm) tm.style.display = (showDateTime && showTicker) ? 'block' : 'none';
   const dt = $('date');
-  if (dt) dt.style.display = (showDateTime && showTicker) ? 'block' : 'none';
-
   const und = $('under');
-  if (und) und.style.display = showTicker ? 'block' : 'none';
   const tkr = $('ticker');
-  if (tkr) tkr.style.display = showTicker ? 'block' : 'none';
   const lbl = $('label');
+
+  if (und) und.style.display = showTicker ? 'block' : 'none';
+  if (tkr) tkr.style.display = showTicker ? 'block' : 'none';
   if (lbl) lbl.style.display = showTicker ? 'block' : 'none';
+
+  if (showDateTime) {
+    if (tm) tm.style.display = showTicker ? 'block' : 'none';
+    if (dt) dt.style.display = showTicker ? 'block' : 'none';
+    if (lbl) {
+      lbl.style.left = '445px';
+      lbl.style.clipPath = 'polygon(0 0,100% 0,100% 100%,0 100%,14px 50%)';
+    }
+    if (tkr) {
+      tkr.style.left = '698px';
+      tkr.style.width = '1222px';
+    }
+  } else {
+    // Time & Date unchecked -> Shift 'ताजा खबर' and ticker all the way to left!
+    if (tm) tm.style.display = 'none';
+    if (dt) dt.style.display = 'none';
+    if (lbl) {
+      lbl.style.left = '28px';
+      lbl.style.clipPath = 'polygon(0 0,100% 0,100% 100%,0 100%)';
+    }
+    if (tkr) {
+      tkr.style.left = '288px';
+      tkr.style.width = '1632px';
+    }
+  }
 
   const brk = $('brk');
   const brkTop = showTicker ? 765 : 897;
@@ -445,6 +468,8 @@ window.setPreviewData = function(data) {
       }
       video.style.display = 'block';
       if (placeholder) placeholder.style.display = 'none';
+      video.muted = true;
+      video.playsInline = true;
       video.play().catch(function(){});
     } else {
       video.removeAttribute('src');
