@@ -11,6 +11,7 @@ import '../services/ai_service.dart';
 import '../services/tts_service.dart';
 import '../services/video_engine_service.dart';
 import '../services/overlay_renderer_service.dart';
+import '../services/local_video_server.dart';
 
 class StudioScreen extends StatefulWidget {
   const StudioScreen({Key? key}) : super(key: key);
@@ -36,15 +37,17 @@ class _StudioScreenState extends State<StudioScreen> {
   final TextEditingController _outroController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
 
-  // Media files & players
+  final List<TextEditingController> _sidebarControllers = [];
+
+  // Media files
   String? _selectedVideoPath;
   String? _selectedVideoName;
   String? _selectedLogoPath;
-  VideoPlayerController? _footagePlayerController;
-  VideoPlayerController? _outputPlayerController;
+  String? _selectedLogoBase64;
+  String? _selectedAudioPath;
+  String? _selectedAudioName;
 
-  bool _isVertical = false;
-  double _frameScale = 1.0; // 0.7 to 2.5
+  String _audioMode = "tts"; // "tts" or "upload"
   String _selectedVoice = 'hi-IN-MadhurNeural';
   double _ttsSpeed = 1.0;
 
@@ -52,6 +55,7 @@ class _StudioScreenState extends State<StudioScreen> {
   double _progressValue = 0.0;
   String _progressStatus = "";
   String? _finalVideoPath;
+  VideoPlayerController? _finalVideoPlayerController;
 
   @override
   void initState() {
@@ -61,16 +65,37 @@ class _StudioScreenState extends State<StudioScreen> {
     _locationController.text = _config.locationText;
     _tickerTagController.text = _config.tickerTag;
     _tickerController.text = _config.tickerText;
-    _scriptController.text = "नमस्कार, आप देख रहे हैं श्री NEWS 24x7। भोपाल में आज सुबह से ही जोरदार बारिश का दौर जारी है। मौसम विभाग ने अगले 24 घंटे के लिए भारी बारिश का अलर्ट जारी किया है।";
-    _outroController.text = "देश और दुनिया की तमाम बड़ी खबरों के लिए बने रहिए श्री NEWS 24x7 के साथ।";
+    _scriptController.text =
+        "नमस्कार, आप देख रहे हैं श्री NEWS 24x7। भोपाल में आज सुबह से ही जोरदार बारिश का दौर जारी है। मौसम विभाग ने अगले 24 घंटे के लिए भारी बारिश का येलो अलर्ट जारी किया है।";
+    _outroController.text = _config.outroText;
 
+    for (int i = 0; i < 5; i++) {
+      _sidebarControllers.add(
+        TextEditingController(
+          text: i < _config.sidebarItems.length ? _config.sidebarItems[i] : "",
+        ),
+      );
+    }
+
+    LocalVideoServer.ensureStarted();
     _initWebView();
   }
 
   @override
   void dispose() {
-    _footagePlayerController?.dispose();
-    _outputPlayerController?.dispose();
+    for (final c in _sidebarControllers) {
+      c.dispose();
+    }
+    _headlineController.dispose();
+    _subHeadlineController.dispose();
+    _locationController.dispose();
+    _tickerTagController.dispose();
+    _tickerController.dispose();
+    _scriptController.dispose();
+    _topicController.dispose();
+    _outroController.dispose();
+    _apiKeyController.dispose();
+    _finalVideoPlayerController?.dispose();
     super.dispose();
   }
 
@@ -90,76 +115,58 @@ class _StudioScreenState extends State<StudioScreen> {
           },
         ),
       )
-      ..loadFlutterAsset('assets/web/index.html');
+      ..loadFlutterAsset(
+        _config.aspectRatio == "9:16"
+            ? 'assets/web/bhopal-news-bulletin.html'
+            : 'assets/web/index.html',
+      );
   }
 
-  void _setAspectRatio(bool isVertical) {
-    if (_isVertical == isVertical) return;
+  void _setAspectRatio(String ratio) {
+    if (_config.aspectRatio == ratio) return;
     setState(() {
-      _isVertical = isVertical;
-      _config.aspectRatio = isVertical ? "9:16" : "16:9";
+      _config.aspectRatio = ratio;
     });
     _webViewController.loadFlutterAsset(
-      isVertical ? 'assets/web/bhopal-news-bulletin.html' : 'assets/web/index.html',
+      ratio == "9:16"
+          ? 'assets/web/bhopal-news-bulletin.html'
+          : 'assets/web/index.html',
     );
   }
 
-  /// Sends updated text, toggles and scale to the in-app Web monitor
   void _syncConfigToWeb() {
     if (!_isWebViewReady) return;
 
-    final jsCode = '''
-      var hl = document.getElementById("hl") || document.getElementById("mainHeadline");
-      if (hl) hl.textContent = ${jsonEncode(_headlineController.text)};
-      var sub = document.getElementById("subt") || document.getElementById("subHeadline");
-      if (sub) sub.textContent = ${jsonEncode(_subHeadlineController.text)};
-      var loc = document.getElementById("location") || document.getElementById("locationText");
-      if (loc) loc.textContent = ${jsonEncode(_locationController.text.replaceAll('📍', '').trim())};
-      
-      var lbl = document.getElementById("label");
-      if (lbl) lbl.textContent = ${jsonEncode(_tickerTagController.text)};
-      
-      var trk = document.getElementById("track");
-      if (trk) {
-        var t = ${jsonEncode(_tickerController.text)};
-        trk.innerHTML = "<span>" + t + "</span><span>" + t + "</span>";
-      }
+    final sidebarList = _sidebarControllers.map((c) => c.text).toList();
+    _config.sidebarItems = sidebarList;
+    _config.headlineText = _headlineController.text;
+    _config.subHeadline = _subHeadlineController.text;
+    _config.locationText = _locationController.text;
+    _config.tickerTag = _tickerTagController.text;
+    _config.tickerText = _tickerController.text;
 
-      // Toggles
-      var hdr = document.getElementById("header");
-      if (hdr) hdr.style.display = ${_config.enableTopBar} ? "block" : "none";
-      var bnr = document.getElementById("banner");
-      if (bnr) bnr.style.display = ${_config.enableTopBar} ? "block" : "none";
-      var cards = document.querySelectorAll(".card");
-      cards.forEach(function(c) { c.style.display = ${_config.enableTopBar} ? "flex" : "none"; });
-      var lgo = document.getElementById("logo");
-      if (lgo) lgo.style.display = ${_config.enableTopBar} ? "flex" : "none";
+    final data = {
+      'headline': _config.headlineText,
+      'subtitle': _config.subHeadline,
+      'location': _config.locationText,
+      'locationEnabled': _config.enableLocation,
+      'topBarEnabled': _config.enableTopBar,
+      'sidebarEnabled': _config.aspectRatio == "16:9" && _config.enableSidebar,
+      'datetimeEnabled': _config.enableDateTime,
+      'anchorEnabled': _config.aspectRatio == "16:9" && _config.enableAnchor,
+      'tickerEnabled': _config.enableTicker,
+      'tickerTag': _config.tickerTag,
+      'tickerText': _config.tickerText,
+      'sidebarItems': sidebarList,
+      'frameScale': _config.frameScale,
+      'videoSrc': LocalVideoServer.videoUrl,
+      'logoSrc': _selectedLogoBase64,
+    };
 
-      var locBox = document.getElementById("loc");
-      if (locBox) locBox.style.display = ${_config.enableLocation} ? "flex" : "none";
-
-      var tm = document.getElementById("time");
-      if (tm) tm.style.display = ${_config.enableDateTime && _config.enableTicker} ? "block" : "none";
-      var dt = document.getElementById("date");
-      if (dt) dt.style.display = ${_config.enableDateTime && _config.enableTicker} ? "block" : "none";
-
-      var und = document.getElementById("under");
-      if (und) und.style.display = ${_config.enableTicker} ? "block" : "none";
-      var tkr = document.getElementById("ticker");
-      if (tkr) tkr.style.display = ${_config.enableTicker} ? "block" : "none";
-      if (lbl) lbl.style.display = ${_config.enableTicker} ? "block" : "none";
-
-      var brk = document.getElementById("brk");
-      if (brk) brk.style.top = ${_config.enableTicker} ? "765px" : "897px";
-
-      if (typeof fitAll === "function") fitAll();
-      if (typeof fit === "function") fit();
-      if (typeof fitScreen === "function") fitScreen();
-    ''';
-    _webViewController.runJavaScript(jsCode);
+    final jsCall = 'if (window.setPreviewData) { window.setPreviewData(${jsonEncode(data)}); }';
+    _webViewController.runJavaScript(jsCall);
   }
 
-  /// Picks background video from phone storage and initializes live background monitor
   Future<void> _pickVideo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.video,
@@ -172,21 +179,20 @@ class _StudioScreenState extends State<StudioScreen> {
         _selectedVideoPath = path;
         _selectedVideoName = result.files.single.name;
       });
-
-      _footagePlayerController?.dispose();
-      _footagePlayerController = VideoPlayerController.file(File(path))
-        ..initialize().then((_) {
-          if (mounted) {
-            _footagePlayerController?.setLooping(true);
-            _footagePlayerController?.setVolume(0.0);
-            _footagePlayerController?.play();
-            setState(() {});
-          }
-        });
+      LocalVideoServer.setVideoPath(path);
+      _syncConfigToWeb();
     }
   }
 
-  /// Picks custom channel logo (PNG/JPG)
+  void _clearVideo() {
+    setState(() {
+      _selectedVideoPath = null;
+      _selectedVideoName = null;
+    });
+    LocalVideoServer.setVideoPath(null);
+    _syncConfigToWeb();
+  }
+
   Future<void> _pickLogo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -194,16 +200,45 @@ class _StudioScreenState extends State<StudioScreen> {
     );
 
     if (result != null && result.files.single.path != null) {
+      final path = result.files.single.path!;
+      final bytes = await File(path).readAsBytes();
+      final base64String = base64Encode(bytes);
+      final mime = path.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
       setState(() {
-        _selectedLogoPath = result.files.single.path;
+        _selectedLogoPath = path;
+        _selectedLogoBase64 = 'data:$mime;base64,$base64String';
+        _config.customLogoPath = path;
       });
+      _syncConfigToWeb();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('कस्टम चैनल लोगो सफलतापूर्वक लोड हुआ!')),
+        const SnackBar(content: Text('कस्टम चैनल लोगो लोड हुआ!')),
       );
     }
   }
 
-  /// Generates authentic Hindi news script (Cloud Groq or Smart Offline Template)
+  void _resetLogo() {
+    setState(() {
+      _selectedLogoPath = null;
+      _selectedLogoBase64 = null;
+      _config.customLogoPath = null;
+    });
+    _syncConfigToWeb();
+  }
+
+  Future<void> _pickAudio() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.audio,
+      allowMultiple: false,
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _selectedAudioPath = result.files.single.path!;
+        _selectedAudioName = result.files.single.name;
+      });
+    }
+  }
+
   Future<void> _generateScript() async {
     setState(() {
       _isProcessing = true;
@@ -235,33 +270,85 @@ class _StudioScreenState extends State<StudioScreen> {
     }
   }
 
-  /// Generates the TV broadcast video locally using phone hardware
   Future<void> _generateBroadcastVideo() async {
     if (_selectedVideoPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('कृपया पहले बैकग्राउंड वीडियो फुटेज चुनें।')),
+        const SnackBar(
+          content: Text('कृपया Step 1 में बैकग्राउंड वीडियो फ़ाइल चुनें!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_audioMode == "upload" && _selectedAudioPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('कृपया Step 2 में ऑडियो फ़ाइल चुनें!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    if (_audioMode == "tts" && _scriptController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('कृपया न्यूज़ एंकर स्क्रिप्ट लिखें!'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
 
     setState(() {
       _isProcessing = true;
-      _progressValue = 0.08;
-      _progressStatus = "Rendering broadcast graphics with authentic Hindi fonts...";
+      _progressValue = 0.05;
+      _progressStatus = "Preparing TV newsroom pipeline...";
       _finalVideoPath = null;
     });
 
     try {
-      _config.headlineText = _headlineController.text;
-      _config.subHeadline = _subHeadlineController.text;
-      _config.locationText = _locationController.text;
-      _config.tickerTag = _tickerTagController.text;
-      _config.tickerText = _tickerController.text;
+      String mainAudioPath;
+      String? outroAudioPath;
 
-      final targetW = _isVertical ? 720 : 1280;
-      final targetH = _isVertical ? 1280 : 720;
+      if (_audioMode == "tts") {
+        setState(() {
+          _progressValue = 0.15;
+          _progressStatus = "Synthesizing AI anchor voiceover...";
+        });
 
-      // 1. Generate high-fidelity broadcast overlay PNG (master web plate + HarfBuzz Hindi text)
+        mainAudioPath = await TtsService.generateSpeech(
+          text: _scriptController.text.trim(),
+          voice: _selectedVoice,
+          speed: _ttsSpeed,
+        );
+
+        if (_config.audioMixMode == "intro_then_ground_outro" &&
+            _outroController.text.trim().isNotEmpty) {
+          setState(() {
+            _progressValue = 0.25;
+            _progressStatus = "Synthesizing anchor outro conclusion...";
+          });
+          outroAudioPath = await TtsService.generateSpeech(
+            text: _outroController.text.trim(),
+            voice: _selectedVoice,
+            speed: _ttsSpeed,
+          );
+        }
+      } else {
+        mainAudioPath = _selectedAudioPath!;
+      }
+
+      setState(() {
+        _progressValue = 0.35;
+        _progressStatus = "Compositing broadcast graphics overlays...";
+      });
+
+      final isVertical = _config.aspectRatio == "9:16";
+      final targetW = isVertical ? 720 : 1280;
+      final targetH = isVertical ? 1280 : 720;
+
       final overlayPath = await OverlayRendererService.generateOverlay(
         config: _config,
         targetWidth: targetW,
@@ -269,633 +356,1358 @@ class _StudioScreenState extends State<StudioScreen> {
         customLogoPath: _selectedLogoPath,
       );
 
-      // 2. Synthesize Hindi News Anchor Speech locally via Edge-TTS / Google Hindi TTS
-      setState(() {
-        _progressValue = 0.22;
-        _progressStatus = "Synthesizing Hindi News Anchor voiceover...";
-      });
-
-      final audioPath = await TtsService.generateSpeech(
-        text: _scriptController.text,
-        voice: _selectedVoice,
-        speed: _ttsSpeed,
-      );
-
-      String? outroAudioPath;
-      if (_config.audioMixMode == "intro_then_ground_outro" && _outroController.text.trim().isNotEmpty) {
-        setState(() {
-          _progressValue = 0.35;
-          _progressStatus = "Synthesizing Anchor Outro voiceover...";
-        });
-        outroAudioPath = await TtsService.generateSpeech(
-          text: _outroController.text.trim(),
-          voice: _selectedVoice,
-          speed: _ttsSpeed,
-        );
-      }
-
-      // 3. Render video using mobile local FFmpeg Engine
-      final outputVideo = await VideoEngineService.renderVideo(
+      final outputPath = await VideoEngineService.renderVideo(
         videoPath: _selectedVideoPath!,
-        audioPath: audioPath,
+        audioPath: mainAudioPath,
         overlayPath: overlayPath,
         config: _config,
         outroAudioPath: outroAudioPath,
         onProgress: (p, status) {
-          setState(() {
-            _progressValue = p;
-            _progressStatus = status;
-          });
+          if (mounted) {
+            setState(() {
+              _progressValue = p;
+              _progressStatus = status;
+            });
+          }
         },
       );
 
-      // Initialize in-app playback for the rendered video
-      _outputPlayerController?.dispose();
-      _outputPlayerController = VideoPlayerController.file(File(outputVideo))
+      setState(() {
+        _finalVideoPath = outputPath;
+        _progressValue = 1.0;
+        _progressStatus = "Complete!";
+      });
+
+      _finalVideoPlayerController?.dispose();
+      _finalVideoPlayerController = VideoPlayerController.file(File(outputPath))
         ..initialize().then((_) {
-          if (mounted) {
-            _outputPlayerController?.setLooping(true);
-            _outputPlayerController?.play();
-            setState(() {});
-          }
+          if (mounted) setState(() {});
         });
 
-      setState(() {
-        _finalVideoPath = outputVideo;
-        _isProcessing = false;
-        _progressValue = 1.0;
-        _progressStatus = "HD Broadcast Video Ready!";
-      });
-    } catch (e) {
-      setState(() {
-        _isProcessing = false;
-        _progressStatus = "Error: $e";
-      });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Rendering Error: $e'), duration: const Duration(seconds: 6)),
+        const SnackBar(
+          content: Text('🎉 HD ब्रॉडकास्ट वीडियो सफलतापूर्वक तैयार हो गया!'),
+          backgroundColor: Colors.green,
+        ),
       );
+    } catch (e) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text('Rendering Error', style: TextStyle(color: Colors.redAccent)),
+          content: SingleChildScrollView(
+            child: Text('$e', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final monitorRatio = _isVertical ? 9 / 16 : 16 / 9;
+    final isVertical = _config.aspectRatio == "9:16";
+    final monitorRatio = isVertical ? (9 / 16) : (16 / 9);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF0B1120),
       appBar: AppBar(
-        title: const Text('SHREE NEWS STUDIO', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        backgroundColor: const Color(0xFF1E293B),
-        elevation: 4,
+        backgroundColor: const Color(0xFF0F172A),
+        elevation: 2,
+        title: Row(
+          children: const [
+            Text(
+              'SHREE NEWS ',
+              style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 18),
+            ),
+            Text(
+              'STUDIO',
+              style: TextStyle(fontWeight: FontWeight.w900, color: Colors.redAccent, fontSize: 18),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _syncConfigToWeb,
-            tooltip: 'Sync UI Monitor',
-          )
+            icon: const Icon(Icons.refresh, color: Colors.white70),
+            onPressed: () {
+              _syncConfigToWeb();
+            },
+          ),
         ],
       ),
       body: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. FORMAT SELECTOR & LIVE MONITOR
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Video Format selector (16:9 vs 9:16)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _setAspectRatio(false),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: !_isVertical ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: !_isVertical ? Colors.redAccent : Colors.grey.shade800),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                "16:9 Landscape (TV News)",
-                                style: TextStyle(
-                                  color: !_isVertical ? Colors.white : Colors.white60,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () => _setAspectRatio(true),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: _isVertical ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: _isVertical ? Colors.redAccent : Colors.grey.shade800),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                "9:16 Reel / Short",
-                                style: TextStyle(
-                                  color: _isVertical ? Colors.white : Colors.white60,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-
-                    // TV Screen Monitor Box (Stacked Video Player + Web UI overlay)
-                    Center(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          color: Colors.black,
-                          child: AspectRatio(
-                            aspectRatio: monitorRatio,
-                            child: Stack(
-                              children: [
-                                // Layer 1: Background Video Footage
-                                if (_footagePlayerController != null && _footagePlayerController!.value.isInitialized)
-                                  Positioned.fill(
-                                    child: FittedBox(
-                                      fit: _frameScale > 1.8 ? BoxFit.cover : BoxFit.contain,
-                                      child: SizedBox(
-                                        width: _footagePlayerController!.value.size.width,
-                                        height: _footagePlayerController!.value.size.height,
-                                        child: VideoPlayer(_footagePlayerController!),
-                                      ),
-                                    ),
-                                  ),
-
-                                // Layer 2: Live HTML5 Broadcast Graphics Template
-                                Positioned.fill(
-                                  child: WebViewWidget(controller: _webViewController),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // ==========================================
+              // LIVE LAYOUT & OUTPUT MONITOR
+              // ==========================================
+              _buildMonitorCard(monitorRatio, isVertical),
 
               const SizedBox(height: 16),
 
-              // 2. BROADCAST GRAPHICS TOGGLES (SCREENSHOT 2 FEATURE)
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'BROADCAST GRAPHICS TOGGLES',
-                      style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Top Segment Bar (आज की बड़ी खबर)', style: TextStyle(color: Colors.white, fontSize: 12)),
-                            value: _config.enableTopBar,
-                            activeColor: Colors.redAccent,
-                            onChanged: (val) {
-                              setState(() => _config.enableTopBar = val ?? true);
-                              _syncConfigToWeb();
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Location Pin', style: TextStyle(color: Colors.white, fontSize: 12)),
-                            value: _config.enableLocation,
-                            activeColor: Colors.redAccent,
-                            onChanged: (val) {
-                              setState(() => _config.enableLocation = val ?? true);
-                              _syncConfigToWeb();
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Clock & Date Bar', style: TextStyle(color: Colors.white, fontSize: 12)),
-                            value: _config.enableDateTime,
-                            activeColor: Colors.redAccent,
-                            onChanged: (val) {
-                              setState(() => _config.enableDateTime = val ?? true);
-                              _syncConfigToWeb();
-                            },
-                          ),
-                        ),
-                        Expanded(
-                          child: CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('Bottom Ticker Bar', style: TextStyle(color: Colors.white, fontSize: 12)),
-                            value: _config.enableTicker,
-                            activeColor: Colors.redAccent,
-                            onChanged: (val) {
-                              setState(() => _config.enableTicker = val ?? true);
-                              _syncConfigToWeb();
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const Divider(color: Colors.white24, height: 24),
-
-                    // Video Footage Screen Size Slider
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Video Footage Screen Size', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: Colors.amber.shade900, borderRadius: BorderRadius.circular(4)),
-                          child: Text(
-                            "${(_frameScale * 100).toInt()}% ${_frameScale >= 2.0 ? '(Full Screen)' : _frameScale >= 1.5 ? '(Wide)' : _frameScale >= 1.0 ? '(Default)' : '(Compact)'}",
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: _frameScale,
-                      min: 0.70,
-                      max: 2.50,
-                      divisions: 18,
-                      activeColor: Colors.redAccent,
-                      inactiveColor: Colors.white24,
-                      onChanged: (v) {
-                        setState(() => _frameScale = v);
-                        _syncConfigToWeb();
-                      },
-                    ),
-                  ],
-                ),
-              ),
+              // ==========================================
+              // 1. VIDEO FOOTAGE & CHANNEL LOGO
+              // ==========================================
+              _buildStep1Card(),
 
               const SizedBox(height: 16),
 
-              // 3. MEDIA UPLOADS (FOOTAGE & CUSTOM LOGO)
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('MEDIA UPLOADS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 12),
-
-                    // Background Video File Picker
-                    InkWell(
-                      onTap: _pickVideo,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.5)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.video_library, color: Colors.blueAccent, size: 26),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                _selectedVideoName ?? "Click to pick background video footage from phone storage *",
-                                style: TextStyle(color: _selectedVideoName != null ? Colors.greenAccent : Colors.white70),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Channel Logo Picker
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: _pickLogo,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: Colors.amber.withOpacity(0.5)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.image, color: Colors.amber, size: 24),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      _selectedLogoPath != null ? "Custom Logo Attached" : "Upload Custom Channel Logo (PNG/JPG)",
-                                      style: TextStyle(color: _selectedLogoPath != null ? Colors.amberAccent : Colors.white70, fontSize: 13),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        if (_selectedLogoPath != null) ...[
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.redAccent),
-                            onPressed: () => setState(() => _selectedLogoPath = null),
-                            tooltip: 'Remove Custom Logo',
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              // ==========================================
+              // 2. AUDIO & VOICEOVER ENGINE
+              // ==========================================
+              _buildStep2Card(),
 
               const SizedBox(height: 16),
 
-              // 4. BROADCAST HEADLINES & DETAILS
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('BROADCAST HEADLINES & TICKERS', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: _headlineController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(labelText: 'Main News Headline (Red Bar) *', labelStyle: TextStyle(color: Colors.white70)),
-                      onChanged: (_) => _syncConfigToWeb(),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _subHeadlineController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(labelText: 'Sub-headline (White Bar)', labelStyle: TextStyle(color: Colors.white70)),
-                      onChanged: (_) => _syncConfigToWeb(),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _locationController,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(labelText: 'Location Tag (e.g. 📍 भोपाल, मध्य प्रदेश)', labelStyle: TextStyle(color: Colors.white70)),
-                      onChanged: (_) => _syncConfigToWeb(),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _tickerTagController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(labelText: 'Ticker Tag', labelStyle: TextStyle(color: Colors.white70)),
-                            onChanged: (_) => _syncConfigToWeb(),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _tickerController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(labelText: 'Scrolling Ticker (Crawls Behind Tag)', labelStyle: TextStyle(color: Colors.white70)),
-                            onChanged: (_) => _syncConfigToWeb(),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              // ==========================================
+              // 3. BROADCAST LAYOUT, HEADLINES & TOGGLES
+              // ==========================================
+              _buildStep3Card(isVertical),
 
               const SizedBox(height: 16),
 
-              // 5. AUDIO & VOICEOVER ENGINE
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFF334155)),
-                ),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('AUDIO & VOICEOVER ENGINE (AI ANCHOR)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _topicController,
-                            style: const TextStyle(color: Colors.white),
-                            decoration: const InputDecoration(labelText: 'AI Topic (e.g. भोपाल में भारी बारिश)', labelStyle: TextStyle(color: Colors.white70)),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        ElevatedButton.icon(
-                          onPressed: _isProcessing ? null : _generateScript,
-                          icon: const Icon(Icons.auto_awesome),
-                          label: const Text('Write Script'),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.purpleAccent),
-                        )
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: _scriptController,
-                      maxLines: 3,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(labelText: 'Anchor Voiceover Script', labelStyle: TextStyle(color: Colors.white70)),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        const Text('Voice:', style: TextStyle(color: Colors.white70)),
-                        const SizedBox(width: 10),
-                        DropdownButton<String>(
-                          value: _selectedVoice,
-                          dropdownColor: const Color(0xFF1E293B),
-                          style: const TextStyle(color: Colors.white),
-                          items: const [
-                            DropdownMenuItem(value: 'hi-IN-MadhurNeural', child: Text('★ Madhur (Hindi Male News Anchor)')),
-                            DropdownMenuItem(value: 'hi-IN-SwaraNeural', child: Text('★ Swara (Hindi Female News Anchor)')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => _selectedVoice = v);
-                          },
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        Text('Speed: ${_ttsSpeed.toStringAsFixed(2)}x', style: const TextStyle(color: Colors.white70)),
-                        Expanded(
-                          child: Slider(
-                            value: _ttsSpeed,
-                            min: 0.75,
-                            max: 1.5,
-                            divisions: 15,
-                            activeColor: Colors.purpleAccent,
-                            onChanged: (v) => setState(() => _ttsSpeed = v),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
+              // ==========================================
+              // 4. BROADCAST AUDIO MIXING & VIDEO TIMELINE
+              // ==========================================
+              _buildStep4Card(),
 
               const SizedBox(height: 20),
 
-              // 6. GENERATION PROGRESS BAR
-              if (_isProcessing) ...[
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: const Color(0xFF1E293B), borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    children: [
-                      LinearProgressIndicator(value: _progressValue > 0 ? _progressValue : null, color: Colors.redAccent, backgroundColor: Colors.white12),
-                      const SizedBox(height: 10),
-                      Text(_progressStatus, style: const TextStyle(color: Colors.white70, fontSize: 13), textAlign: TextAlign.center),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
+              // ==========================================
+              // GENERATE / DOWNLOAD BUTTON
+              // ==========================================
+              _buildGenerateSection(),
 
-              // 7. RENDERED VIDEO OUTPUT PLAYER
-              if (_finalVideoPath != null && _outputPlayerController != null && _outputPlayerController!.value.isInitialized) ...[
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.greenAccent),
-                  ),
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Text('RENDERED BROADCAST VIDEO', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
-                          Icon(Icons.check_circle, color: Colors.greenAccent, size: 20),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: AspectRatio(
-                          aspectRatio: monitorRatio,
-                          child: VideoPlayer(_outputPlayerController!),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                if (_outputPlayerController!.value.isPlaying) {
-                                  _outputPlayerController!.pause();
-                                } else {
-                                  _outputPlayerController!.play();
-                                }
-                                setState(() {});
-                              },
-                              icon: Icon(_outputPlayerController!.value.isPlaying ? Icons.pause : Icons.play_arrow),
-                              label: Text(_outputPlayerController!.value.isPlaying ? "Pause" : "Play"),
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF334155)),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                if (_finalVideoPath != null) {
-                                  OpenFile.open(_finalVideoPath!);
-                                }
-                              },
-                              icon: const Icon(Icons.open_in_new),
-                              label: const Text("Open Fullscreen"),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // 8. GENERATE NEWS VIDEO BUTTON
-              ElevatedButton.icon(
-                onPressed: _isProcessing ? null : _generateBroadcastVideo,
-                icon: const Icon(Icons.bolt, size: 26),
-                label: const Text('GENERATE NEWS VIDEO', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.1)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFDC2626),
-                  padding: const EdgeInsets.symmetric(vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-              const SizedBox(height: 30),
+              const SizedBox(height: 40),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // Monitor Card
+  Widget _buildMonitorCard(double monitorRatio, bool isVertical) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Live Layout & Output Monitor',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isVertical ? Colors.amber.withOpacity(0.15) : Colors.red.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isVertical ? Colors.amber : Colors.redAccent,
+                  ),
+                ),
+                child: Text(
+                  isVertical ? '9:16 VERTICAL' : '16:9 LANDSCAPE',
+                  style: TextStyle(
+                    color: isVertical ? Colors.amber : Colors.redAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Live WebView Monitor (Exact 16:9 or 9:16 layout)
+          Center(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                color: Colors.black,
+                constraints: BoxConstraints(
+                  maxHeight: isVertical ? 420 : 220,
+                ),
+                child: AspectRatio(
+                  aspectRatio: monitorRatio,
+                  child: WebViewWidget(controller: _webViewController),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step 1: Media Files Card
+  Widget _buildStep1Card() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStepHeader("1", "Video Footage & Channel Logo"),
+          const SizedBox(height: 14),
+
+          // Background Video Footage Dropzone
+          const Text(
+            "Background Video Footage *",
+            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          InkWell(
+            onTap: _pickVideo,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: _selectedVideoPath != null ? Colors.green : const Color(0xFF475569),
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: _selectedVideoPath == null
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.video_library_outlined, color: Colors.blueAccent, size: 28),
+                        SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text("Click to pick video footage",
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                            Text("MP4, MOV, WEBM, MKV",
+                                style: TextStyle(color: Colors.white54, fontSize: 11)),
+                          ],
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green, size: 24),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedVideoName ?? "video.mp4",
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
+                          onPressed: _clearVideo,
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Channel Logo Section
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text(
+                "Channel Logo (Fixed at Top-Right)",
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                "Default: logo.png",
+                style: TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              InkWell(
+                onTap: _pickLogo,
+                child: Container(
+                  width: 80,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.amber.shade700),
+                  ),
+                  child: _selectedLogoPath != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Image.file(File(_selectedLogoPath!), fit: BoxFit.contain),
+                        )
+                      : const Center(
+                          child: Icon(Icons.add_photo_alternate, color: Colors.amber, size: 26),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _selectedLogoPath != null ? "✓ Custom Logo Active" : "✓ Shree News default logo active",
+                      style: TextStyle(
+                        color: _selectedLogoPath != null ? Colors.green : Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Text(
+                      "Click box to upload custom channel logo (PNG/JPG)",
+                      style: TextStyle(color: Colors.white54, fontSize: 10),
+                    ),
+                    if (_selectedLogoPath != null)
+                      TextButton(
+                        onPressed: _resetLogo,
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(50, 20),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text("↺ Revert to Default Logo",
+                            style: TextStyle(color: Colors.amber, fontSize: 11)),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Step 2: Audio Engine Card
+  Widget _buildStep2Card() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStepHeader("2", "Audio & Voiceover Engine"),
+          const SizedBox(height: 14),
+
+          // Tabs: AI Anchor vs Direct Upload
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _audioMode = "tts"),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _audioMode == "tts" ? const Color(0xFF3B82F6) : const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _audioMode == "tts" ? Colors.blueAccent : Colors.grey.shade800),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.mic, color: Colors.white, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          "AI Anchor (TTS)",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _audioMode = "upload"),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _audioMode == "upload" ? const Color(0xFF3B82F6) : const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _audioMode == "upload" ? Colors.blueAccent : Colors.grey.shade800),
+                    ),
+                    alignment: Alignment.center,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.audio_file, color: Colors.white, size: 16),
+                        SizedBox(width: 6),
+                        Text(
+                          "Direct Audio Upload",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          if (_audioMode == "tts") ...[
+            // AI Script Writer Box
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: const [
+                      Text(
+                        "AI Script Writer",
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
+                      Text("Qwen / Llama 3.3", style: TextStyle(color: Colors.white54, fontSize: 10)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _topicController,
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          decoration: InputDecoration(
+                            hintText: "विषय लिखें (e.g. भोपाल में भारी बारिश)...",
+                            hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                            filled: true,
+                            fillColor: const Color(0xFF1E293B),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: _isProcessing ? null : _generateScript,
+                        icon: const Icon(Icons.auto_awesome, size: 16),
+                        label: const Text("Write", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFA855F7),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // News Script Textarea
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "News Script / Content *",
+                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  "${_scriptController.text.length} chars",
+                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _scriptController,
+              maxLines: 4,
+              style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                contentPadding: const EdgeInsets.all(12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Voice Selector (All 9 Voices)
+            const Text(
+              "Anchor Voice (9 Professional TV Broadcasters)",
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedVoice,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF0F172A),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  items: kNewsVoices.map((voice) {
+                    return DropdownMenuItem<String>(
+                      value: voice.id,
+                      child: Text(voice.name, overflow: TextOverflow.ellipsis),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) setState(() => _selectedVoice = val);
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 14),
+
+            // Voice Speed Slider
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Voice Speed:", style: TextStyle(color: Colors.white, fontSize: 13)),
+                Text("${_ttsSpeed.toStringAsFixed(2)}x",
+                    style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            Slider(
+              value: _ttsSpeed,
+              min: 0.8,
+              max: 2.0,
+              divisions: 12,
+              activeColor: Colors.redAccent,
+              onChanged: (val) => setState(() => _ttsSpeed = val),
+            ),
+          ] else ...[
+            // Direct Audio Upload
+            InkWell(
+              onTap: _pickAudio,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _selectedAudioPath != null ? Colors.green : const Color(0xFF475569),
+                  ),
+                ),
+                child: _selectedAudioPath == null
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.upload_file, color: Colors.blueAccent, size: 26),
+                          SizedBox(width: 8),
+                          Text("Click to pick MP3, WAV or AAC audio",
+                              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(_selectedAudioName ?? "audio.mp3",
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Step 3: Broadcast Layout, Headlines & Toggles
+  Widget _buildStep3Card(bool isVertical) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildStepHeader("3", "Broadcast Layout, Headlines & Toggles"),
+          const SizedBox(height: 14),
+
+          // Video Format Selector
+          const Text("Video Format", style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => _setAspectRatio("16:9"),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: !isVertical ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: !isVertical ? Colors.redAccent : Colors.grey.shade800),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      "16:9 Landscape (TV News)",
+                      style: TextStyle(
+                        color: !isVertical ? Colors.white : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: () => _setAspectRatio("9:16"),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isVertical ? const Color(0xFFDC2626) : const Color(0xFF0F172A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: isVertical ? Colors.redAccent : Colors.grey.shade800),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      "9:16 Reel / Short",
+                      style: TextStyle(
+                        color: isVertical ? Colors.white : Colors.white60,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Broadcast Graphics Toggles
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "BROADCAST GRAPHICS TOGGLES",
+                  style: TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 10),
+
+                // Toggles Grid
+                if (!isVertical) ...[
+                  // 16:9 Landscape Mode: 6 Toggles in 2 Rows
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Top Segment Bar (आज की बड़ी खबर)",
+                          value: _config.enableTopBar,
+                          onChanged: (v) {
+                            setState(() => _config.enableTopBar = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Left Sidebar (मुख्य खबरें 01-05)",
+                          value: _config.enableSidebar,
+                          onChanged: (v) {
+                            setState(() => _config.enableSidebar = v ?? false);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Location Pin",
+                          value: _config.enableLocation,
+                          onChanged: (v) {
+                            setState(() => _config.enableLocation = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Clock & Date Bar (10:25 AM | 28 Oct)",
+                          value: _config.enableDateTime,
+                          onChanged: (v) {
+                            setState(() => _config.enableDateTime = v ?? false);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Studio Anchor Window (PiP)",
+                          value: _config.enableAnchor,
+                          onChanged: (v) {
+                            setState(() => _config.enableAnchor = v ?? false);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Bottom Ticker Bar (ताजा खबर और टिकर पट्टी)",
+                          value: _config.enableTicker,
+                          onChanged: (v) {
+                            setState(() => _config.enableTicker = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // 9:16 Portrait Mode: 4 Toggles (Sidebar & Anchor are hidden in 9:16!)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Top Segment Bar (आज की बड़ी खबर)",
+                          value: _config.enableTopBar,
+                          onChanged: (v) {
+                            setState(() => _config.enableTopBar = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Location Pin",
+                          value: _config.enableLocation,
+                          onChanged: (v) {
+                            setState(() => _config.enableLocation = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Clock & Date Bar",
+                          value: _config.enableDateTime,
+                          onChanged: (v) {
+                            setState(() => _config.enableDateTime = v ?? false);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildCheckbox(
+                          label: "Bottom Ticker Bar (ताजा खबर और टिकर पट्टी)",
+                          value: _config.enableTicker,
+                          onChanged: (v) {
+                            setState(() => _config.enableTicker = v ?? true);
+                            _syncConfigToWeb();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // Video Footage Screen Size Slider (70% - 250%)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("📺 Video Footage Screen Size",
+                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  "${_config.frameScale.toInt()}% ${_config.frameScale == 100 ? '(Default)' : (_config.frameScale >= 250 ? '(Full Screen)' : (_config.frameScale >= 180 ? '(Wide)' : '(Compact)'))}",
+                  style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: _config.frameScale,
+            min: 70,
+            max: 250,
+            divisions: 36,
+            activeColor: Colors.redAccent,
+            onChanged: (val) {
+              setState(() => _config.frameScale = val);
+              _syncConfigToWeb();
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text("70% (Compact)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("100% (Default)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("180% (Wide)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("250% (Full Screen)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Location Tag Input
+          if (_config.enableLocation) ...[
+            const Text("Location Tag (e.g. 📍 भोपाल, मध्य प्रदेश)",
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _locationController,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              onChanged: (_) => _syncConfigToWeb(),
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Left Sidebar Headlines (16:9 only)
+          if (!isVertical && _config.enableSidebar) ...[
+            const Text("Left Sidebar Headlines (01 to 05)",
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 6),
+            ...List.generate(5, (idx) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: TextField(
+                  controller: _sidebarControllers[idx],
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  onChanged: (_) => _syncConfigToWeb(),
+                  decoration: InputDecoration(
+                    prefixText: "0${idx + 1}  ",
+                    prefixStyle: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                    filled: true,
+                    fillColor: const Color(0xFF0F172A),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                  ),
+                ),
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+
+          // Main News Headline (Red Bar)
+          const Text("Main News Headline (Red Bar) *",
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _headlineController,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            onChanged: (_) => _syncConfigToWeb(),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF0F172A),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Sub-headline (White Bar)
+          const Text("Sub-headline (White Bar)",
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          TextField(
+            controller: _subHeadlineController,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            onChanged: (_) => _syncConfigToWeb(),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF0F172A),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Ticker Tag & Scrolling Ticker
+          if (_config.enableTicker) ...[
+            Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Ticker Tag",
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _tickerTagController,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        onChanged: (_) => _syncConfigToWeb(),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: const Color(0xFF0F172A),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 7,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Scrolling Ticker (Crawls Behind Tag)",
+                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 6),
+                      TextField(
+                        controller: _tickerController,
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                        onChanged: (_) => _syncConfigToWeb(),
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: const Color(0xFF0F172A),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Step 4: Broadcast Audio Mixing & Video Timeline (TV Newsroom) (Screenshot 4)
+  Widget _buildStep4Card() {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF334155)),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Text("🎧 ", style: TextStyle(fontSize: 16)),
+              Expanded(
+                child: Text(
+                  "Broadcast Audio Mixing & Video Timeline (TV Newsroom)",
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          const Text(
+            "Broadcast Audio & Playback Flow",
+            style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: _config.audioMixMode,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF0F172A),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                items: const [
+                  DropdownMenuItem(
+                    value: "voiceover_ambient",
+                    child: Text("Mode 1: Voiceover + Ambient Footage Audio (TV Ducking ~20%)"),
+                  ),
+                  DropdownMenuItem(
+                    value: "intro_then_ground",
+                    child: Text("Mode 2: Anchor Intro ➔ Ground Video with 100% Natural Audio"),
+                  ),
+                  DropdownMenuItem(
+                    value: "intro_then_ground_outro",
+                    child: Text("Mode 3: 3-Stage TV Package (Anchor Intro ➔ Ground Clip ➔ Anchor Outro)"),
+                  ),
+                  DropdownMenuItem(
+                    value: "voiceover_only",
+                    child: Text("Mode 4: Voiceover Only (Mute Footage Sound)"),
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => _config.audioMixMode = val);
+                },
+              ),
+            ),
+          ),
+
+          // Sub-options for Mode 1
+          if (_config.audioMixMode == "voiceover_ambient") ...[
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Footage Background Sound Level:", style: TextStyle(color: Colors.white, fontSize: 13)),
+                Text("${(_config.footageVolume * 100).toInt()}%",
+                    style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            Slider(
+              value: _config.footageVolume,
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              activeColor: Colors.redAccent,
+              onChanged: (val) => setState(() => _config.footageVolume = val),
+            ),
+          ],
+
+          // Sub-options for Mode 2 & Mode 3
+          if (_config.audioMixMode == "intro_then_ground" ||
+              _config.audioMixMode == "intro_then_ground_outro") ...[
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155), style: BorderStyle.solid),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      "Mute Footage Audio while Anchor is speaking",
+                      style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: const Text(
+                      "एंकर के बोलते समय वीडियो की आवाज म्यूट रहेगी, ग्राउंड वीडियो में 100% ओरिजिनल आवाज चलेगी।",
+                      style: TextStyle(color: Colors.white54, fontSize: 11),
+                    ),
+                    value: _config.muteDuringAnchor,
+                    activeColor: Colors.redAccent,
+                    onChanged: (val) => setState(() => _config.muteDuringAnchor = val ?? true),
+                  ),
+                  const Divider(color: Colors.white12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text("Ground Video Duration:", style: TextStyle(color: Colors.white, fontSize: 12)),
+                      Text("${_config.groundClipDuration.toInt()} sec",
+                          style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
+                    ],
+                  ),
+                  Slider(
+                    value: _config.groundClipDuration,
+                    min: 3,
+                    max: 120,
+                    divisions: 117,
+                    activeColor: Colors.redAccent,
+                    onChanged: (val) => setState(() => _config.groundClipDuration = val),
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text(
+                      "Restart Video from 0:00 when Anchor finishes",
+                      style: TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    value: _config.restartFootage,
+                    activeColor: Colors.redAccent,
+                    onChanged: (val) => setState(() => _config.restartFootage = val ?? false),
+                  ),
+
+                  // Mode 3 Outro Options
+                  if (_config.audioMixMode == "intro_then_ground_outro") ...[
+                    const Divider(color: Colors.white12),
+                    const Text("Anchor Outro Script (Sign-off / Conclusion) *",
+                        style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _outroController,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: const Color(0xFF1E293B),
+                        contentPadding: const EdgeInsets.all(10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                      ),
+                    ),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        "Restart Video from 0:00 for Outro / Sign-off",
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                      ),
+                      value: _config.restartOutroFootage,
+                      activeColor: Colors.redAccent,
+                      onChanged: (val) => setState(() => _config.restartOutroFootage = val ?? false),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Generate & Download Section
+  Widget _buildGenerateSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_isProcessing) ...[
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E293B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.redAccent.withOpacity(0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(_progressStatus,
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                    Text("${(_progressValue * 100).toInt()}%",
+                        style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LinearProgressIndicator(
+                  value: _progressValue,
+                  backgroundColor: const Color(0xFF0F172A),
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                  minHeight: 8,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        // GENERATE BUTTON
+        InkWell(
+          onTap: _isProcessing ? null : _generateBroadcastVideo,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE50914), Color(0xFFB81D24)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.redAccent.withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.bolt, color: Colors.white, size: 24),
+                SizedBox(width: 8),
+                Text(
+                  "GENERATE NEWS VIDEO",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // DOWNLOAD / SAVE BUTTON (When Generated)
+        if (_finalVideoPath != null) ...[
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF064E3B),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.greenAccent),
+            ),
+            child: Column(
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.greenAccent, size: 26),
+                    SizedBox(width: 8),
+                    Text(
+                      "BROADCAST VIDEO READY!",
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    OpenFile.open(_finalVideoPath!);
+                  },
+                  icon: const Icon(Icons.download_rounded, size: 22),
+                  label: const Text(
+                    "DOWNLOAD / OPEN BROADCAST VIDEO",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.greenAccent.shade700,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStepHeader(String stepNum, String title) {
+    return Row(
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: Colors.redAccent,
+            borderRadius: BorderRadius.circular(13),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            stepNum,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCheckbox({
+    required String label,
+    required bool value,
+    required Function(bool?) onChanged,
+  }) {
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11)),
+      value: value,
+      activeColor: Colors.redAccent,
+      onChanged: onChanged,
     );
   }
 }

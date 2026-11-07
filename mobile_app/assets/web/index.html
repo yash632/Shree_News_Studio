@@ -78,7 +78,7 @@ body{display:block;position:relative}
 
 /* LEFT PANEL */
 #left{left:28px;top:162px;width:375px;height:595px;border-radius:24px;border:4px solid #f5b81c;
- background:linear-gradient(180deg,#e01a25,#a50b17 60%,#8a0813);box-shadow:0 0 18px rgba(255,190,40,.8),inset 0 0 20px rgba(0,0,0,.35);z-index:20}
+ background:linear-gradient(180deg,#e01a25,#a50b17 60%,#8a0813);box-shadow:0 0 18px rgba(255,190,40,.8),inset 0 0 20px rgba(0,0,0,.35);z-index:20;display:none;}
 #left h2{position:absolute;left:38px;top:4px;font-size:60px;line-height:80px;font-weight:900;color:#fff;text-shadow:0 3px 4px rgba(0,0,0,.5)}
 #left h2 span{color:#ffc61a}
 .news{position:absolute;left:10px;width:348px;height:88px;border-radius:15px;background:linear-gradient(#ffffff,#ececec);box-shadow:0 2px 4px rgba(0,0,0,.4);display:flex;align-items:center}
@@ -86,14 +86,17 @@ body{display:block;position:relative}
 .news .tx{margin-left:14px;font-size:27px;line-height:33px;color:#1a1a1a;font-weight:700;width:235px}
 
 /* LOCATION TAG */
-#loc{left:1130px;top:192px;height:54px;display:flex;box-shadow:0 3px 8px rgba(0,0,0,.5);z-index:20;border-radius:4px;overflow:hidden}
+#loc{left:583px;top:183px;height:54px;display:flex;box-shadow:0 3px 8px rgba(0,0,0,.5);z-index:20;border-radius:4px;overflow:hidden}
 #loc .pin{width:54px;height:54px;background:linear-gradient(#e11d2a,#a00a16);position:relative}
 #loc .pin:after{content:"";position:absolute;left:17px;top:10px;width:20px;height:20px;border-radius:50% 50% 50% 0;background:#fff;transform:rotate(-45deg);top:11px}
 #loc .pin:before{content:"";position:absolute;left:23px;top:17px;width:8px;height:8px;border-radius:50%;background:#c4121f;z-index:2}
 #loc .nm{background:#0d1f5c;color:#fff;font-size:28px;line-height:54px;padding:0 22px 0 12px;font-weight:700}
 
 /* MAIN AREA FRAME (footage frame) */
-#frame{left:575px;top:173px;width:770px;height:567px;border:none;box-shadow:none;background:transparent;z-index:4}
+#frame{left:575px;top:173px;width:770px;height:567px;border:none;box-shadow:none;background:transparent;z-index:4;overflow:hidden;}
+
+/* NEWS ANCHOR LAYER */
+#anchor{display:none;position:absolute;z-index:14;pointer-events:none;align-items:flex-end;justify-content:center;width:720px;height:620px;}
 
 /* BREAKING NEWS BAND */
 #brk{left:0;top:765px;width:1920px;height:183px;overflow:hidden;box-shadow:0 -3px 8px rgba(0,0,0,.5);
@@ -121,8 +124,8 @@ body{display:block;position:relative}
 
 /* BOTTOM TICKER & TIME BAR */
 #under{left:0;top:948px;width:1920px;height:132px;background:linear-gradient(90deg,#d6d4d4 0,#e9c0cc 16%,#faf1f2 45%,#f2eeee 70%,#dedede 100%);z-index:18}
-#time{left:30px;top:970px;width:215px;height:88px;border-radius:12px 0 0 12px;background:linear-gradient(#e11d2a,#9c0914);color:#fff;font-size:42px;line-height:92px;text-align:center;font-weight:800;box-shadow:inset 0 2px 0 rgba(255,255,255,.35);z-index:22}
-#date{left:235px;top:970px;width:210px;height:88px;background:#fff;clip-path:polygon(18px 0,100% 0,100% 100%,0 100%);text-align:center;font-size:28px;line-height:34px;padding-top:11px;color:#111;font-weight:700;z-index:22}
+#time{left:30px;top:970px;width:215px;height:88px;border-radius:12px 0 0 12px;background:linear-gradient(#e11d2a,#9c0914);color:#fff;font-size:42px;line-height:92px;text-align:center;font-weight:800;box-shadow:inset 0 2px 0 rgba(255,255,255,.35);z-index:22;display:none;}
+#date{left:235px;top:970px;width:210px;height:88px;background:#fff;clip-path:polygon(18px 0,100% 0,100% 100%,0 100%);text-align:center;font-size:28px;line-height:34px;padding-top:11px;color:#111;font-weight:700;z-index:22;display:none;}
 #label{left:445px;top:970px;width:260px;height:88px;background:linear-gradient(#e11d2a,#a00a16);clip-path:polygon(0 0,100% 0,100% 100%,0 100%,14px 50%);color:#fff;font-size:50px;line-height:84px;font-weight:900;text-align:center;padding-left:14px;text-shadow:0 3px 3px rgba(0,0,0,.4);z-index:22}
 #ticker{left:698px;top:970px;width:1222px;height:88px;background:linear-gradient(#10215f,#081338);overflow:hidden;border-top:2px solid #2a3f8f;z-index:22}
 #track{position:absolute;left:0;top:0;white-space:nowrap;display:inline-block;color:#fff;font-size:40px;line-height:84px;font-weight:600;animation:scroll 40s linear infinite;will-change:transform}
@@ -145,21 +148,18 @@ body{display:block;position:relative}
  </div>
 
  <!-- 3 TOP CARDS WITH IMAGES -->
- <!-- Card 1: Palace -->
  <div class="card card-1 abs">
   <div class="thumb-box"><img src="palace.jpg" alt="प्रदेश की हर खबर"></div>
   <div class="a">प्रदेश की हर खबर</div>
   <div class="b">सबसे पहले</div>
  </div>
 
- <!-- Card 2: Globe -->
  <div class="card card-2 abs">
   <div class="thumb-box globe-box"><img src="globe.jpg" alt="देश-दुनिया की"></div>
   <div class="a">देश-दुनिया की</div>
   <div class="b">ताजा अपडेट</div>
  </div>
 
- <!-- Card 3: Street / Highway -->
  <div class="card card-3 abs">
   <div class="thumb-box"><img src="highway.jpg" alt="आपके शहर की"></div>
   <div class="a">आपके शहर की</div>
@@ -178,13 +178,30 @@ body{display:block;position:relative}
  </div>
 
  <!-- FOOTAGE FRAME & LOCATION -->
- <div id="frame" class="abs"></div>
- <div id="loc" class="abs"><div class="pin"></div><div class="nm" id="location"></div></div>
+ <div id="frame" class="abs">
+  <video id="previewFootageVideo" autoplay loop muted playsinline style="display:none;width:100%;height:100%;object-fit:contain;background:transparent;"></video>
+  <div class="footage-placeholder" id="footagePlaceholder" style="display:flex;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;color:rgba(255,255,255,0.4);border:2px dashed rgba(255,255,255,0.2);">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <polygon points="5 3 19 12 5 21 5 3"></polygon>
+    </svg>
+    <span style="margin-top:8px;font-size:24px;font-weight:600;">User Video Window</span>
+  </div>
+ </div>
+
+ <div id="loc" class="abs">
+  <div class="pin"></div>
+  <div class="nm" id="location">भोपाल, मध्य प्रदेश</div>
+ </div>
+
+ <!-- NEWS ANCHOR LAYER -->
+ <div id="anchor" class="abs">
+  <img src="anchor.png" alt="News Anchor" style="height:100%;width:auto;object-fit:contain;display:block;" onerror="this.style.display='none'">
+ </div>
 
  <!-- BREAKING NEWS BANNER -->
  <div id="brk" class="abs">
-  <div id="sub"><div id="subt" class="fit st" data-w="1023" data-max="52" data-cx="686" data-by="54"></div></div>
-  <div id="hl" class="fit hs" data-w="1230" data-max="80" data-cx="1210" data-by="83"></div>
+  <div id="sub"><div id="subt" class="fit st" data-w="1023" data-max="52" data-cx="686" data-by="54">हम आपके लिए लाए हैं ताज़ा समाचार</div></div>
+  <div id="hl" class="fit hs" data-w="1230" data-max="80" data-cx="1210" data-by="83">श्री न्यूज़ 24x7 में आपका स्वागत है</div>
   <div id="band"></div><div id="lc"></div>
   <div id="hexo"></div><div id="hexi"></div><div id="gold"></div>
   <div id="bn1" class="fit" data-w="380" data-cx="255" data-by="77">BREAKING</div>
@@ -193,51 +210,23 @@ body{display:block;position:relative}
 
  <!-- BOTTOM BAR -->
  <div id="under" class="abs"></div>
- <div id="time" class="abs"></div>
- <div id="date" class="abs"></div>
+ <div id="time" class="abs">10:25 AM</div>
+ <div id="date" class="abs">28 Oct 2026<br>मंगलवार</div>
  <div id="label" class="abs">ताजा खबर</div>
  <div id="ticker" class="abs"><div id="track"></div></div>
 </div>
 
 <script>
-const CONFIG = {
-  mainHeadline: "भोपाल में आज तेज बारिश, कई इलाकों में जलभराव",
-  subtitle: "मौसम विभाग ने अगले 24 घंटे के लिए जारी किया अलर्ट",
-  location: "भोपाल, मध्य प्रदेश",
-  sideHeadlines: [
-    "भोपाल से<br>इस वक्त की बड़ी खबर",
-    "प्रदेश में मौसम<br>को लेकर नया अपडेट",
-    "देश-दुनिया की<br>खास खबरें",
-    "बाजार में आज<br>का हाल",
-    "खेल जगत से<br>बड़ी अपडेट"
-  ],
-  tickerText: "भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर",
-  useSystemClock: true,          // false = use fixedTime/fixedDate
-  fixedTime: "10:25 AM",
-  fixedDate: "28 Oct 2026",
-  fixedWeekday: "मंगलवार"
-};
-
 const $ = id => document.getElementById(id);
-$('hl').textContent = CONFIG.mainHeadline;
-$('subt').textContent = CONFIG.subtitle;
-$('location').textContent = CONFIG.location;
-$('list').innerHTML = CONFIG.sideHeadlines.map((h,i)=>
-  `<div class="news" style="top:${82+i*98}px"><div class="num">0${i+1}</div><div class="tx">${h}</div></div>`).join('');
-$('track').innerHTML = `<span>${CONFIG.tickerText}</span><span>${CONFIG.tickerText}</span>`;
 
 const days = ["रविवार","सोमवार","मंगलवार","बुधवार","गुरुवार","शुक्रवार","शनिवार"];
 const mons = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 function tick(){
-  if(!CONFIG.useSystemClock){
-    $('time').textContent = CONFIG.fixedTime;
-    $('date').innerHTML = CONFIG.fixedDate + "<br>" + CONFIG.fixedWeekday;
-    return;
-  }
   const d = new Date();
   let h = d.getHours(), ap = h>=12?"PM":"AM"; h = h%12||12;
-  $('time').textContent = `${String(h).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} ${ap}`;
-  $('date').innerHTML = `${String(d.getDate()).padStart(2,'0')} ${mons[d.getMonth()]} ${d.getFullYear()}<br>${days[d.getDay()]}`;
+  const timeEl = $('time'), dateEl = $('date');
+  if(timeEl) timeEl.textContent = `${String(h).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')} ${ap}`;
+  if(dateEl) dateEl.innerHTML = `${String(d.getDate()).padStart(2,'0')} ${mons[d.getMonth()]} ${d.getFullYear()}<br>${days[d.getDay()]}`;
 }
 tick(); setInterval(tick, 1000);
 
@@ -277,14 +266,11 @@ function fitAll(){
     el.style.top=(+el.dataset.by-lineCentreAboveBase)+'px';
   });
 }
-fitAll(); addEventListener('load',fitAll); setTimeout(fitAll,1200);
-if(document.fonts&&document.fonts.load){
-  Promise.all([document.fonts.load('800 40px Hind','आज'),document.fonts.load('800 40px "Noto Sans Devanagari"','आज')]).then(fitAll).catch(()=>{});
-}
+fitAll(); addEventListener('load',fitAll);
 
 function fit(){
-  const vw = window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth || 360;
-  const vh = window.innerHeight || document.documentElement.clientHeight || document.body.clientHeight || 202;
+  const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 202;
   const s = Math.min(vw / 1920, vh / 1080);
   const c = $('canvas');
   if (c) {
@@ -292,33 +278,189 @@ function fit(){
     c.style.transform = 'scale(' + s + ')';
     c.style.left = Math.max(0, (vw - 1920 * s) / 2) + 'px';
     c.style.top = Math.max(0, (vh - 1080 * s) / 2) + 'px';
-    c.style.marginLeft = '0px';
-    c.style.marginTop = '0px';
   }
 }
 window.addEventListener('resize', fit);
 window.addEventListener('load', fit);
 fit();
-setTimeout(fit, 100);
-setTimeout(fit, 400);
-setTimeout(fit, 1000);
 
-window.prepareForOverlayExport = function() {
-  document.body.style.background = 'transparent';
-  var cv = $('canvas');
-  if (cv) cv.style.background = 'transparent';
-  var gl = document.querySelector('.glow');
-  if (gl) gl.style.display = 'none';
-  var fr = $('frame');
-  if (fr) fr.style.background = 'transparent';
-};
+window.setPreviewData = function(data) {
+  if (!data) return;
 
-window.restoreAfterOverlayExport = function() {
-  document.body.style.background = '#000';
-  var cv = $('canvas');
-  if (cv) cv.style.background = 'radial-gradient(ellipse at 50% 45%,#1b2a6b 0%,#0c1440 45%,#2a0a14 100%)';
-  var gl = document.querySelector('.glow');
-  if (gl) gl.style.display = 'block';
+  // 1. Text Elements
+  if (data.headline !== undefined) {
+    const hl = $('hl');
+    if (hl) hl.textContent = data.headline;
+  }
+  if (data.subtitle !== undefined) {
+    const subt = $('subt');
+    if (subt) subt.textContent = data.subtitle;
+  }
+  if (data.location !== undefined) {
+    const loc = $('location');
+    if (loc) loc.textContent = data.location.replace(/^📍\s*/, '');
+  }
+  if (data.tickerTag !== undefined) {
+    const lbl = $('label');
+    if (lbl) lbl.textContent = data.tickerTag;
+  }
+  if (data.tickerText !== undefined) {
+    const trk = $('track');
+    if (trk) {
+      trk.innerHTML = '<span>' + data.tickerText + '</span><span>' + data.tickerText + '</span>';
+    }
+  }
+
+  // 2. Sidebar Headlines
+  if (data.sidebarItems && Array.isArray(data.sidebarItems)) {
+    const list = $('list');
+    if (list) {
+      list.innerHTML = data.sidebarItems.map((h, i) =>
+        `<div class="news" style="top:${82 + i * 98}px"><div class="num">0${i + 1}</div><div class="tx">${h}</div></div>`
+      ).join('');
+    }
+  }
+
+  // 3. Toggles
+  const showTop = data.topBarEnabled !== false;
+  const showSidebar = !!data.sidebarEnabled;
+  const showLoc = !!data.locationEnabled;
+  const showDateTime = !!data.datetimeEnabled;
+  const showAnchor = !!data.anchorEnabled;
+  const showTicker = !!data.tickerEnabled;
+
+  const hdr = $('header');
+  if (hdr) hdr.style.display = showTop ? 'block' : 'none';
+  const bnr = $('banner');
+  if (bnr) bnr.style.display = showTop ? 'block' : 'none';
+  document.querySelectorAll('.card').forEach(c => { c.style.display = showTop ? 'flex' : 'none'; });
+  const lgo = $('logo');
+  if (lgo) lgo.style.display = showTop ? 'flex' : 'none';
+
+  const left = $('left');
+  if (left) left.style.display = showSidebar ? 'block' : 'none';
+
+  const anchor = $('anchor');
+  if (anchor) anchor.style.display = showAnchor ? 'flex' : 'none';
+
+  const locBox = $('loc');
+  if (locBox) locBox.style.display = showLoc ? 'flex' : 'none';
+
+  const tm = $('time');
+  if (tm) tm.style.display = (showDateTime && showTicker) ? 'block' : 'none';
+  const dt = $('date');
+  if (dt) dt.style.display = (showDateTime && showTicker) ? 'block' : 'none';
+
+  const und = $('under');
+  if (und) und.style.display = showTicker ? 'block' : 'none';
+  const tkr = $('ticker');
+  if (tkr) tkr.style.display = showTicker ? 'block' : 'none';
+  const lbl = $('label');
+  if (lbl) lbl.style.display = showTicker ? 'block' : 'none';
+
+  const brk = $('brk');
+  const brkTop = showTicker ? 765 : 897;
+  if (brk) brk.style.top = brkTop + 'px';
+
+  // 4. Exact Frame and Location Pin Math from static/js/app.js
+  const scaleVal = data.frameScale || 100;
+  const scale = scaleVal / 100;
+  const stdW = 770;
+  const stdH = 567;
+  const topNavBottom = showTop ? 148 : 0;
+  const availH = Math.max(100, brkTop - topNavBottom);
+  const centerVerticalY = Math.max(0, Math.round(topNavBottom + (availH - stdH) / 2));
+
+  let frameW, frameH, frameX, frameY;
+  let anchorX = 100;
+
+  if (scaleVal >= 100) {
+    const t = Math.min(1.0, (scaleVal - 100) / 150);
+    frameW = Math.round(stdW + (1920 - stdW) * t);
+    frameH = Math.round(stdH + (1080 - stdH) * t);
+    const targetCenterY = Math.round((1080 - frameH) / 2);
+    frameY = Math.round(centerVerticalY + (targetCenterY - centerVerticalY) * t);
+  } else {
+    frameW = Math.round(stdW * scale);
+    frameH = Math.round(stdH * scale);
+    frameY = Math.round(centerVerticalY + (stdH - frameH) / 2);
+  }
+
+  if (!showSidebar && !showAnchor) {
+    frameX = Math.round((1920 - frameW) / 2);
+    const freeH = brkTop - topNavBottom;
+    frameY = Math.round(topNavBottom + (freeH - frameH) / 2);
+  } else if (showAnchor && showSidebar) {
+    const openRight = 1000;
+    const stdX = Math.max(0, Math.round(openRight + (1920 - openRight - stdW) / 2));
+    const targetCenterX = Math.round((1920 - frameW) / 2);
+    const t = scaleVal >= 100 ? Math.min(1.0, (scaleVal - 100) / 150) : 0;
+    frameX = Math.round(stdX * (1 - t) + targetCenterX * t);
+    anchorX = 380;
+  } else if (!showAnchor && showSidebar) {
+    const openStart = 400;
+    const openWidth = 1920 - openStart;
+    const stdX = Math.max(0, Math.round(openStart + (openWidth - stdW) / 2));
+    const targetCenterX = Math.round((1920 - frameW) / 2);
+    const t = scaleVal >= 100 ? Math.min(1.0, (scaleVal - 100) / 150) : 0;
+    frameX = Math.round(stdX * (1 - t) + targetCenterX * t);
+  } else if (showAnchor && !showSidebar) {
+    anchorX = 100;
+    const rightStart = 650;
+    const rightWidth = 1920 - rightStart;
+    const stdX = Math.max(0, Math.round(rightStart + (rightWidth - stdW) / 2));
+    const targetCenterX = Math.round((1920 - frameW) / 2);
+    const t = scaleVal >= 100 ? Math.min(1.0, (scaleVal - 100) / 150) : 0;
+    frameX = Math.round(stdX * (1 - t) + targetCenterX * t);
+  }
+
+  const frameEl = $('frame');
+  if (frameEl) {
+    frameEl.style.left = frameX + 'px';
+    frameEl.style.top = frameY + 'px';
+    frameEl.style.width = frameW + 'px';
+    frameEl.style.height = frameH + 'px';
+  }
+
+  if (anchor) {
+    anchor.style.left = anchorX + 'px';
+    anchor.style.top = (brkTop - 620) + 'px';
+  }
+
+  // Location pin pinned strictly to top-left of video frame
+  if (locBox) {
+    locBox.style.left = (frameX + 8) + 'px';
+    locBox.style.top = (frameY + 10) + 'px';
+  }
+
+  // 5. Video Footage Inside #frame
+  const video = $('previewFootageVideo');
+  const placeholder = $('footagePlaceholder');
+  if (video) {
+    video.style.objectFit = (scaleVal >= 180) ? 'cover' : 'contain';
+    if (data.videoSrc) {
+      if (video.src !== data.videoSrc) {
+        video.src = data.videoSrc;
+        video.load();
+      }
+      video.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+      video.play().catch(function(){});
+    } else {
+      video.removeAttribute('src');
+      video.style.display = 'none';
+      if (placeholder) placeholder.style.display = 'flex';
+    }
+  }
+
+  // 6. Custom Logo
+  if (data.logoSrc) {
+    const logoImg = $('logoImg');
+    if (logoImg) logoImg.src = data.logoSrc;
+  }
+
+  fitAll();
+  fit();
 };
 </script>
 </body>

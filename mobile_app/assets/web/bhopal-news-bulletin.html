@@ -32,7 +32,7 @@ body{
   transform-origin:top left;
   position:absolute;
 }
-.poster{position:relative;width:941px;height:1672px;overflow:hidden;font-family:'Hind','Noto Sans Devanagari',sans-serif;background:#fff url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat}
+.poster{position:relative;width:941px;height:1672px;overflow:hidden;font-family:'Hind','Noto Sans Devanagari',sans-serif;background:#fff url('waves.png') center/cover no-repeat}
 .a{position:absolute}
 /* text: left + vertical-centre are exact; font-size auto-fits to data-w (px width) */
 .t{position:absolute;white-space:nowrap;transform:translateY(-50%);line-height:1.15;font-weight:700;z-index:20}
@@ -40,7 +40,7 @@ body{
 .rc{font-family:'Roboto Condensed','Arial Narrow',sans-serif;font-weight:700}
 
 /* ===== TOP BACKGROUND ===== */
-.topbg{left:0;top:0;width:941px;height:352px;background:url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat;
+.topbg{left:0;top:0;width:941px;height:352px;background:url('waves.png') center/cover no-repeat;
 /*
  background:
   radial-gradient(ellipse 150px 110px at 60px 110px,#fff,transparent 80%),
@@ -153,12 +153,12 @@ body{
 <div class="wrap" id="wrap">
 <div class="poster">
 
-<div class="a topbg"></div>
+<div class="a topbg" id="topbg"></div>
 
 <!-- TITLE -->
-<div class="a title"><i></i></div>
-<div class="t" data-fs="64" data-w="214" style="left:55px;top:115px;color:#fff;text-shadow:0 3px 4px rgba(0,0,0,.45)">आज की</div>
-<div class="t" data-fs="64" data-w="262" style="left:321px;top:123px;color:#111">बड़ी खबर</div>
+<div class="a title" id="title"><i></i></div>
+<div class="t" id="title1" data-fs="64" data-w="214" style="left:55px;top:115px;color:#fff;text-shadow:0 3px 4px rgba(0,0,0,.45)">आज की</div>
+<div class="t" id="title2" data-fs="64" data-w="262" style="left:321px;top:123px;color:#111">बड़ी खबर</div>
 
 <!-- LOGO -->
 <div class="a logoBox" id="portraitLogoBox" style="display:flex;align-items:center;justify-content:center;overflow:hidden;padding:10px;">
@@ -166,18 +166,18 @@ body{
 </div>
 
 <!-- STRIP -->
-<div class="a strip"></div>
-<div class="a thumb" id="thumb1" style="left:17px;top:240px;width:118px;height:88px"><img src="/static/assets/palace.jpg" alt=""></div>
-<div class="a div" style="left:323px"></div>
-<div class="a thumb globe" id="thumb2" style="left:337px;top:243px;width:82px;height:82px"><img src="/static/assets/globe.jpg" alt=""></div>
-<div class="a div" style="left:597px"></div>
-<div class="a thumb" id="thumb3" style="left:611px;top:240px;width:120px;height:88px"><img src="/static/assets/highway.jpg" alt=""></div>
-<div class="t" data-fs="28" data-w="161" style="left:146px;top:261px;color:#222">प्रदेश की हर खबर</div>
-<div class="t" data-fs="30" data-w="120" style="left:147px;top:299px;color:#cf1620">सबसे पहले</div>
-<div class="t" data-fs="28" data-w="149" style="left:433px;top:261px;color:#222">देश-दुनिया की</div>
-<div class="t" data-fs="30" data-w="136" style="left:433px;top:298px;color:#cf1620">ताजा अपडेट</div>
-<div class="t" data-fs="28" data-w="156" style="left:744px;top:261px;color:#222">आपके शहर की</div>
-<div class="t" data-fs="30" data-w="184" style="left:742px;top:300px;color:#cf1620">हर छोटी-बड़ी खबर</div>
+<div class="a strip" id="strip"></div>
+<div class="a thumb" id="thumb1" style="left:17px;top:240px;width:118px;height:88px"><img src="palace.jpg" alt=""></div>
+<div class="a div" id="div1" style="left:323px"></div>
+<div class="a thumb globe" id="thumb2" style="left:337px;top:243px;width:82px;height:82px"><img src="globe.jpg" alt=""></div>
+<div class="a div" id="div2" style="left:597px"></div>
+<div class="a thumb" id="thumb3" style="left:611px;top:240px;width:120px;height:88px"><img src="highway.jpg" alt=""></div>
+<div class="t" id="stripT1" data-fs="28" data-w="161" style="left:146px;top:261px;color:#222">प्रदेश की हर खबर</div>
+<div class="t" id="stripT2" data-fs="30" data-w="120" style="left:147px;top:299px;color:#cf1620">सबसे पहले</div>
+<div class="t" id="stripT3" data-fs="28" data-w="149" style="left:433px;top:261px;color:#222">देश-दुनिया की</div>
+<div class="t" id="stripT4" data-fs="30" data-w="136" style="left:433px;top:298px;color:#cf1620">ताजा अपडेट</div>
+<div class="t" id="stripT5" data-fs="28" data-w="156" style="left:744px;top:261px;color:#222">आपके शहर की</div>
+<div class="t" id="stripT6" data-fs="30" data-w="184" style="left:742px;top:300px;color:#cf1620">हर छोटी-बड़ी खबर</div>
 
 <!-- RED SECTION -->
 <div class="a redBg"></div>
@@ -267,6 +267,25 @@ function splitHeadline(text){
 }
 function setPreviewData(data){
   if(!data) return;
+  var showTop = data.topBarEnabled !== false;
+  setVisible('topbg', showTop);
+  setVisible('title', showTop);
+  setVisible('title1', showTop);
+  setVisible('title2', showTop);
+  setVisible('portraitLogoBox', showTop);
+  setVisible('strip', showTop);
+  setVisible('thumb1', showTop);
+  setVisible('thumb2', showTop);
+  setVisible('thumb3', showTop);
+  setVisible('div1', showTop);
+  setVisible('div2', showTop);
+  setVisible('stripT1', showTop);
+  setVisible('stripT2', showTop);
+  setVisible('stripT3', showTop);
+  setVisible('stripT4', showTop);
+  setVisible('stripT5', showTop);
+  setVisible('stripT6', showTop);
+
   var parts=splitHeadline(data.headline||'भोपाल में आज तेज बारिश, कई इलाकों में जलभराव');
   var h1=document.getElementById('headline1'), h2=document.getElementById('headline2');
   if(h1) h1.textContent=parts[0]||'';
@@ -289,7 +308,7 @@ function setPreviewData(data){
   if(t1) t1.textContent='';
   if(t2) t2.textContent='';
   var tickerText=document.getElementById('tickerText');
-  var tVal=(data.ticker||'').trim()||'भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर';
+  var tVal=(data.ticker||data.tickerText||'').trim()||'भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर';
   if(tickerText){
     tickerText.innerHTML='<div class="ticker-roller" id="tickerRoller"><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div></div>';
     var roller=document.getElementById('tickerRoller');
@@ -334,7 +353,7 @@ function setPreviewData(data){
     if(f){
       var w, h, x, y;
       var stdW = 898;
-      var topBound = 340;
+      var topBound = showTop ? 340 : 20;
       var bottomBound = data.tickerEnabled ? 1150 : 1320;
       var availH = bottomBound - topBound;
       var centerY = Math.round((topBound + bottomBound) / 2);
@@ -361,12 +380,12 @@ function setPreviewData(data){
       var loc = document.getElementById('loc');
       if(loc){
         loc.style.left = Math.max(22, x + 10) + 'px';
-        loc.style.top = Math.max(355, y + 17) + 'px';
+        loc.style.top = Math.max(topBound + 15, y + 17) + 'px';
       }
       var locText = document.getElementById('locationText');
       if(locText){
         locText.style.left = Math.max(98, x + 86) + 'px';
-        locText.style.top = Math.max(386, y + 48) + 'px';
+        locText.style.top = Math.max(topBound + 46, y + 48) + 'px';
       }
     }
   }
@@ -376,6 +395,7 @@ function setPreviewData(data){
   }
   fitText();
 }
+window.setPreviewData = setPreviewData;
 window.addEventListener('message',function(event){
   if(event.origin===window.location.origin && event.data){
     if(event.data.type==='portrait-preview'){

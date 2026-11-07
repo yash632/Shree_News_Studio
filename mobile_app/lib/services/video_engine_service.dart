@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/return_code.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit_config.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/broadcast_config.dart';
+import 'overlay_renderer_service.dart';
 
 class VideoEngineService {
   /// Gets exact media duration in seconds via FFprobe.
@@ -69,7 +71,7 @@ class VideoEngineService {
 
     final appDir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final outputPath = '${appDir.path}/news_video_$timestamp.mp4';
+    final outputPath = '${appDir.path}/shree_news_broadcast_$timestamp.mp4';
 
     // Prepare inputs
     final inputArgs = <String>[];
@@ -86,9 +88,12 @@ class VideoEngineService {
     int nextInputIdx = 2;
 
     // Input 2 (Optional): Outro Speech Audio
-    if (outroAudioPath != null && await File(outroAudioPath).exists()) {
+    int? outroInIdx;
+    if (config.audioMixMode == "intro_then_ground_outro" &&
+        outroAudioPath != null &&
+        await File(outroAudioPath).exists()) {
+      outroInIdx = nextInputIdx++;
       inputArgs.addAll(['-i', outroAudioPath]);
-      nextInputIdx = 3;
     }
 
     int groundVidInIdx = 0;
@@ -149,34 +154,88 @@ class VideoEngineService {
       baseVideo = "[0:v]";
     }
 
-    // Scale & Crop Video Frame to target size, overlay Web UI graphics on top
-    vFilters.add(
-      "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
-      "crop=$targetW:$targetH,setsar=1[vbase];"
-      "[vbase][$overlayInIdx:v]overlay=0:0[vout]",
-    );
+    // Scaling & framing logic matching 6b456bd build_video_filter_graph
+    if (config.frameScale >= 180.0) {
+      // Wide / Full screen footage behind graphics
+      vFilters.add(
+        "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
+        "crop=$targetW:$targetH,setsar=1[vbase];"
+        "[vbase][$overlayInIdx:v]overlay=0:0[vout]",
+      );
+    } else {
+      // Framed inside broadcast window
+      if (!isVertical) {
+        final layout = OverlayRendererService.calculateFrameLayout(config);
+        final scaleX = targetW / 1920.0;
+        final scaleY = targetH / 1080.0;
+
+        final vidW = math.max(2, (layout.w * scaleX).round() ~/ 2 * 2);
+        final vidH = math.max(2, (layout.h * scaleY).round() ~/ 2 * 2);
+        final vidX = (layout.x * scaleX).round();
+        final vidY = (layout.y * scaleY).round();
+
+        vFilters.add("color=c=#0c1440:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        vFilters.add(
+          "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
+        );
+        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY[vbase]");
+        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
+      } else {
+        // 9:16 Portrait Framed
+        final topBound = config.enableTopBar ? 340.0 : 20.0;
+        final bottomBound = config.enableTicker ? 1150.0 : 1320.0;
+        final availH = bottomBound - topBound;
+        final scale = config.frameScale / 100.0;
+        const stdW = 898.0;
+        final stdH = math.min(717.0, availH * 0.88);
+
+        final w = (stdW * scale).round();
+        final h = (stdH * scale).round();
+        final x = ((941.0 - w) / 2.0).round();
+        final y = (((topBound + bottomBound) / 2.0) - (h / 2.0)).round();
+
+        final scaleX = targetW / 941.0;
+        final scaleY = targetH / 1672.0;
+
+        final vidW = math.max(2, (w * scaleX).round() ~/ 2 * 2);
+        final vidH = math.max(2, (h * scaleY).round() ~/ 2 * 2);
+        final vidX = (x * scaleX).round();
+        final vidY = (y * scaleY).round();
+
+        vFilters.add("color=c=#000000:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        vFilters.add(
+          "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
+        );
+        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY[vbase]");
+        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
+      }
+    }
 
     // Audio filter graph
     final aFilters = <String>[];
     final introVol = config.muteDuringAnchor ? 0.0 : config.footageVolume;
 
-    if (!videoHasAudio) {
-      // Safe fallback when video has no internal audio
-      if (config.audioMixMode == "intro_then_ground_outro" && outroAudioPath != null) {
+    if (!videoHasAudio || config.audioMixMode == "voiceover_only") {
+      // Voiceover only or silent footage
+      if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
           "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
-          "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
+          "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[aout]",
+        );
+      } else if (config.audioMixMode == "intro_then_ground") {
+        aFilters.add(
+          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[aout]",
         );
       } else {
         aFilters.add("[1:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
       }
     } else {
-      if (config.audioMixMode == "intro_then_ground_outro") {
+      if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
           "[0:a]volume='if(between(t,${audioDur.toStringAsFixed(2)},${(audioDur + groundDur).toStringAsFixed(2)}),1.0,${introVol.toStringAsFixed(2)})':eval=frame[footage_stream];"
           "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
-          "[2:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
+          "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
           "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
         );
@@ -187,6 +246,7 @@ class VideoEngineService {
           "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
         );
       } else {
+        // Mode 1: voiceover_ambient
         aFilters.add(
           "[0:a]volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
           "[1:a]volume=1.0[vca];"
@@ -197,7 +257,6 @@ class VideoEngineService {
 
     final fullFilterComplex = "${vFilters.join(';')};${aFilters.join(';')}";
 
-    // Execute FFmpeg with mobile hardware acceleration
     final cmd = [
       "-y",
       ...inputArgs,
@@ -216,14 +275,14 @@ class VideoEngineService {
       outputPath,
     ];
 
-    onProgress(0.40, "Rendering TV broadcast video with mobile GPU...");
+    onProgress(0.35, "Rendering TV broadcast video locally...");
 
     FFmpegKitConfig.enableStatisticsCallback((stats) {
       final timeMs = stats.getTime();
       if (timeMs > 0 && targetDuration > 0) {
         final currentSec = timeMs / 1000.0;
-        final p = 0.40 + ((currentSec / targetDuration) * 0.55).clamp(0.0, 0.55);
-        onProgress(p, "Rendering video locally: ${(p * 100).toInt()}%...");
+        final p = 0.35 + ((currentSec / targetDuration) * 0.60).clamp(0.0, 0.60);
+        onProgress(p, "Rendering video with mobile GPU: ${(p * 100).toInt()}%...");
       }
     });
 
