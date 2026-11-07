@@ -72,9 +72,6 @@ jobs:
           }
           EOF
 
-          # 5. Add Permissions to AndroidManifest.xml
-          sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"\/>\n    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"\/>\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"\/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"\/>' clean_app/android/app/src/main/AndroidManifest.xml
-
       - name: Build Android Release APK
         run: |
           cd clean_app
