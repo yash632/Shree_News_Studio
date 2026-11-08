@@ -55,7 +55,7 @@ class AiService {
       } catch (_) {}
     }
 
-    // 2. Direct Cloud LLM Call (Groq or Mistral)
+    // 2. Direct Cloud LLM Call (Groq or Mistral if key provided)
     final cleanKey = (apiKey ?? "").trim();
     if (cleanKey.isNotEmpty && cleanKey.length > 15) {
       try {
@@ -111,16 +111,83 @@ STRICT RULES:
           final json = jsonDecode(utf8.decode(response.bodyBytes));
           final rawContent = json['choices'][0]['message']['content'].toString().trim();
           if (rawContent.isNotEmpty) {
-            return parseAiResponse(rawContent);
+            final bundle = parseAiResponse(rawContent);
+            if (bundle.script.isNotEmpty) return bundle;
           }
         }
       } catch (e) {
-        print("Cloud AI error ($e), using dynamic local TV generator...");
+        print("Cloud Key AI error ($e), attempting free Cloud AI engine...");
       }
     }
 
-    // 3. Dynamic Topic-Aware Local News Bulletin Generator (Instant offline zero-config)
+    // 3. True Authentic Cloud AI Engine (Zero-Config, No API Key Required)
+    try {
+      final cloudBundle = await _callFreeCloudAi(cleanTopic);
+      if (cloudBundle != null && cloudBundle.script.isNotEmpty && cloudBundle.headline.isNotEmpty) {
+        return cloudBundle;
+      }
+    } catch (e) {
+      print("Free Cloud AI error ($e), using local fallback...");
+    }
+
+    // 4. Offline Dynamic Local Fallback (Only used if phone has no internet connection)
     return generateDynamicLocalNews(cleanTopic);
+  }
+
+  /// Direct Free Cloud AI Broadcast Engine (Connects to OpenAI-grade LLM without requiring user API key)
+  static Future<AiNewsBundle?> _callFreeCloudAi(String cleanTopic) async {
+    const systemPrompt = '''
+आप Shree News 24×7 के वरिष्ठ हिंदी टीवी न्यूज़ एंकर, न्यूज़ एडिटर और प्रोफेशनल ब्रॉडकास्ट स्क्रिप्ट राइटर हैं।
+आपका काम यूज़र द्वारा दिए गए न्यूज़ टॉपिक पर एक वास्तविक भारतीय हिंदी न्यूज़ चैनल (जैसे Aaj Tak, ABP News) की तरह लाइव न्यूज़ बुलेटिन तैयार करना है।
+
+STRICT RULES:
+1. भाषा वास्तविक टीवी न्यूज़ एंकर की स्वाभाविक और प्रभावशाली हिंदी हो।
+2. छोटे, सीधे और ऊर्जावान वाक्य लिखें।
+3. केवल और केवल नीचे दिए गए चार सेक्शन्स इसी सटीक फॉर्मेट में आउटपुट दें, कोई अतिरिक्त भूमिका या Markdown न लिखें:
+
+===HEADLINE===
+(एक प्रभावशाली और संक्षिप्त मुख्य न्यूज़ हेडलाइन, अधिकतम 10 शब्द)
+
+===SUB_HEADLINE===
+(मुख्य खबर को स्पष्ट करने वाली एक छोटी सब-हेडलाइन, अधिकतम 14 शब्द)
+
+===TICKER===
+(न्यूज़ चैनल के नीचे चलने वाली संक्षिप्त 3-4 अपडेट लाइनें, हर अपडेट को | से अलग करें)
+
+===SCRIPT===
+(न्यूज़ एंकर द्वारा बोली जाने वाली 4 से 6 वाक्यों की प्रोफेशनल लाइव बुलेटिन स्क्रिप्ट। शुरुआत "नमस्कार, इस वक्त की बड़ी खबर..." से करें।)
+''';
+
+    final uri = Uri.parse('https://text.pollinations.ai/');
+    final res = await http.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'messages': [
+          {'role': 'system', 'content': systemPrompt},
+          {
+            'role': 'user',
+            'content': 'News Topic: $cleanTopic\nकृपया ऊपर दिए गए चारों सेक्शन्स (HEADLINE, SUB_HEADLINE, TICKER, SCRIPT) हिंदी में तुरंत लिखें।'
+          }
+        ],
+        'model': 'openai',
+      }),
+    ).timeout(const Duration(seconds: 22));
+
+    if (res.statusCode == 200 && res.body.isNotEmpty) {
+      final raw = utf8.decode(res.bodyBytes).trim();
+      if (raw.isNotEmpty) {
+        if (raw.startsWith('{') && raw.contains('"choices"')) {
+          try {
+            final parsedJson = jsonDecode(raw);
+            final content = parsedJson['choices'][0]['message']['content'].toString().trim();
+            return parseAiResponse(content);
+          } catch (_) {}
+        }
+        return parseAiResponse(raw);
+      }
+    }
+    return null;
   }
 
   /// Parses the ===HEADLINE===, ===SUB_HEADLINE===, ===TICKER===, ===SCRIPT=== tags

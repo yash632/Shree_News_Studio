@@ -356,6 +356,7 @@ class OverlayRendererService {
             const Color(0x66000000),
             const Color(0x00000000),
           ],
+          const [0.0, 0.5, 1.0],
         ),
     );
 
@@ -373,6 +374,7 @@ class OverlayRendererService {
           ui.Offset(28 * scaleX, 22 * scaleY),
           ui.Offset(240 * scaleX, 118 * scaleY),
           [const Color(0xFFD30202), const Color(0xFF8B0000)],
+          const [0.0, 1.0],
         ),
     );
 
@@ -389,6 +391,7 @@ class OverlayRendererService {
           ui.Offset(240 * scaleX, 22 * scaleY),
           ui.Offset(560 * scaleX, 118 * scaleY),
           [const Color(0xFFFFEB3B), const Color(0xFFFBC02D)],
+          const [0.0, 1.0],
         ),
     );
 
@@ -511,6 +514,7 @@ class OverlayRendererService {
           ui.Offset(20 * scaleX, 40 * scaleY),
           ui.Offset(360 * scaleX, 180 * scaleY),
           [const Color(0xFFD30202), const Color(0xFF8B0000)],
+          const [0.0, 1.0],
         ),
     );
 
@@ -527,6 +531,7 @@ class OverlayRendererService {
           ui.Offset(360 * scaleX, 40 * scaleY),
           ui.Offset(680 * scaleX, 180 * scaleY),
           [const Color(0xFFFFEB3B), const Color(0xFFFBC02D)],
+          const [0.0, 1.0],
         ),
     );
 
@@ -637,6 +642,7 @@ class OverlayRendererService {
           ui.Offset(sbX, sbY),
           ui.Offset(sbX, sbY + sbH),
           [const Color(0xFF99000A), const Color(0xFF6E0007)],
+          const [0.0, 1.0],
         ),
     );
     canvas.drawRRect(
@@ -784,6 +790,7 @@ class OverlayRendererService {
           ui.Offset(redRect.left, bandY),
           ui.Offset(redRect.left, bandY + redBarH),
           [const Color(0xFFE60000), const Color(0xFFBA0000), const Color(0xFF7A0000)],
+          const [0.0, 0.5, 1.0],
         ),
     );
 
@@ -803,6 +810,7 @@ class OverlayRendererService {
           ui.Offset(whiteRect.left, bandY + redBarH),
           ui.Offset(whiteRect.left, bandY + redBarH + whiteBarH),
           [const Color(0xFFFFFFFF), const Color(0xFFEBEBEB)],
+          const [0.0, 1.0],
         ),
     );
 
@@ -821,6 +829,7 @@ class OverlayRendererService {
           ui.Offset(0, bandY),
           ui.Offset(chevW, bandY + 180 * scaleY),
           [const Color(0xFFFFEB3B), const Color(0xFFFFA000), const Color(0xFFE65100)],
+          const [0.0, 0.5, 1.0],
         ),
     );
 
@@ -838,6 +847,7 @@ class OverlayRendererService {
           ui.Offset(0, bandY + 8 * scaleY),
           ui.Offset(chevW, bandY + 172 * scaleY),
           [const Color(0xFFD30202), const Color(0xFF900000), const Color(0xFF5A0000)],
+          const [0.0, 0.5, 1.0],
         ),
     );
 
