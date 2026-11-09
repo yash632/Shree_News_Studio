@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
@@ -55,10 +56,20 @@ class _StudioScreenState extends State<StudioScreen> {
   String? _selectedVideoName;
   final List<String> _selectedVideoPaths = [];
   final List<String> _selectedVideoNames = [];
+  double _selectedVideoDuration = 0.0;
+
+  // Stinger video clips (Intro & Outro)
+  String? _introVideoPath;
+  String? _introVideoName;
+  String? _outroVideoPath;
+  String? _outroVideoName;
+
   String? _selectedLogoPath;
   String? _selectedLogoBase64;
   String? _selectedAudioPath;
   String? _selectedAudioName;
+
+  double get _groundSliderMax => math.max(600.0, _selectedVideoDuration);
 
   String _audioMode = "tts"; // "tts" or "upload"
   String _selectedVoice = 'hi-IN-MadhurNeural';
@@ -81,7 +92,7 @@ class _StudioScreenState extends State<StudioScreen> {
     _tickerTagController.text = _config.tickerTag;
     _tickerController.text = _config.tickerText;
     _scriptController.text =
-        "नमस्कार, आप देख रहे हैं श्री NEWS 24x7। भोपाल में आज सुबह से ही जोरदार बारिश का दौर जारी है। मौसम विभाग ने अगले 24 घंटे के लिए भारी बारिश का येलो अलर्ट जारी किया है।";
+        "नमस्कार, आप देख रहे हैं श्री NEWS Twenty Four by Seven। भोपाल में आज सुबह से ही जोरदार बारिश का दौर जारी है। मौसम विभाग ने अगले 24 घंटे के लिए भारी बारिश का येलो अलर्ट जारी किया है।";
     _outroController.text = _config.outroText;
 
     for (int i = 0; i < 5; i++) {
@@ -348,6 +359,29 @@ class _StudioScreenState extends State<StudioScreen> {
     }
   }
 
+  Future<void> _updateVideoDuration() async {
+    if (_selectedVideoPaths.isNotEmpty) {
+      double total = 0.0;
+      for (final p in _selectedVideoPaths) {
+        total += await VideoEngineService.getDuration(p);
+      }
+      if (mounted) {
+        setState(() {
+          _selectedVideoDuration = total;
+          if (_config.groundClipDuration > _groundSliderMax) {
+            _config.groundClipDuration = _groundSliderMax;
+          }
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _selectedVideoDuration = 0.0;
+        });
+      }
+    }
+  }
+
   Future<void> _pickVideo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.video,
@@ -369,6 +403,7 @@ class _StudioScreenState extends State<StudioScreen> {
         });
         LocalVideoServer.setVideoPath(_selectedVideoPath);
         _syncConfigToWeb();
+        await _updateVideoDuration();
       }
     }
   }
@@ -388,6 +423,7 @@ class _StudioScreenState extends State<StudioScreen> {
       });
       LocalVideoServer.setVideoPath(_selectedVideoPath);
       _syncConfigToWeb();
+      _updateVideoDuration();
     }
   }
 
@@ -397,9 +433,56 @@ class _StudioScreenState extends State<StudioScreen> {
       _selectedVideoNames.clear();
       _selectedVideoPath = null;
       _selectedVideoName = null;
+      _selectedVideoDuration = 0.0;
     });
     LocalVideoServer.setVideoPath(null);
     _syncConfigToWeb();
+  }
+
+  Future<void> _pickIntroVideo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+      allowMultiple: false,
+    );
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _introVideoPath = result.files.single.path!;
+        _introVideoName = result.files.single.name;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('चैनल Intro Stinger क्लिप चुनी गई! (शुरुआत में फुल स्क्रीन चलेगी)')),
+      );
+    }
+  }
+
+  void _clearIntroVideo() {
+    setState(() {
+      _introVideoPath = null;
+      _introVideoName = null;
+    });
+  }
+
+  Future<void> _pickOutroVideo() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.video,
+      allowMultiple: false,
+    );
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _outroVideoPath = result.files.single.path!;
+        _outroVideoName = result.files.single.name;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('चैनल Outro Stinger क्लिप चुनी गई! (अंत में फुल स्क्रीन चलेगी)')),
+      );
+    }
+  }
+
+  void _clearOutroVideo() {
+    setState(() {
+      _outroVideoPath = null;
+      _outroVideoName = null;
+    });
   }
 
   Future<void> _pickLogo() async {
@@ -751,6 +834,8 @@ class _StudioScreenState extends State<StudioScreen> {
         overlayPath: overlayPath,
         config: _config,
         outroAudioPath: outroAudioPath,
+        introVideoPath: _introVideoPath,
+        outroVideoPath: _outroVideoPath,
         onProgress: (p, status) {
           if (mounted) {
             setState(() {
@@ -1038,7 +1123,7 @@ class _StudioScreenState extends State<StudioScreen> {
                     border: Border.all(color: Colors.blueAccent.withOpacity(0.5)),
                   ),
                   child: Text(
-                    "${_selectedVideoPaths.length} Clip${_selectedVideoPaths.length > 1 ? 's' : ''}",
+                    "${_selectedVideoPaths.length} Clip${_selectedVideoPaths.length > 1 ? 's' : ''}${_selectedVideoDuration > 0 ? ' (${_selectedVideoDuration.toInt()}s)' : ''}",
                     style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 11),
                   ),
                 ),
@@ -1219,6 +1304,137 @@ class _StudioScreenState extends State<StudioScreen> {
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // 🎬 TV Channel Stinger Videos (Intro & Outro 3D Logo Clips)
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.amber.shade700.withOpacity(0.5)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Row(
+                      children: [
+                        Icon(Icons.movie_creation_outlined, color: Colors.amber, size: 18),
+                        SizedBox(width: 8),
+                        Text(
+                          "TV Channel Stingers (3D Logo Clips)",
+                          style: TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    Text("Optional", style: TextStyle(color: Colors.white38, fontSize: 11)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  "ये वीडियो क्लिप्स न्यूज़ के शुरू और अंत में 100% FULL SCREEN चलेंगी:",
+                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                ),
+                const SizedBox(height: 10),
+
+                // Intro & Outro Stinger Pickers
+                Row(
+                  children: [
+                    // Intro Stinger
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickIntroVideo,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: _introVideoPath != null ? Colors.green : const Color(0xFF475569),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _introVideoPath != null ? Icons.check_circle : Icons.play_circle_outline,
+                                color: _introVideoPath != null ? Colors.green : Colors.blueAccent,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _introVideoName ?? "Intro Clip (शुरुआत)",
+                                  style: TextStyle(
+                                    color: _introVideoPath != null ? Colors.white : Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_introVideoPath != null)
+                                InkWell(
+                                  onTap: _clearIntroVideo,
+                                  child: const Icon(Icons.close, color: Colors.redAccent, size: 16),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // Outro Stinger
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickOutroVideo,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: _outroVideoPath != null ? Colors.green : const Color(0xFF475569),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _outroVideoPath != null ? Icons.check_circle : Icons.stop_circle_outlined,
+                                color: _outroVideoPath != null ? Colors.green : Colors.amber,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _outroVideoName ?? "Outro Clip (अंत)",
+                                  style: TextStyle(
+                                    color: _outroVideoPath != null ? Colors.white : Colors.white70,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              if (_outroVideoPath != null)
+                                InkWell(
+                                  onTap: _clearOutroVideo,
+                                  child: const Icon(Icons.close, color: Colors.redAccent, size: 16),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2040,19 +2256,46 @@ class _StudioScreenState extends State<StudioScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text("Ground Video Duration:", style: TextStyle(color: Colors.white, fontSize: 12)),
-                      Text("${_config.groundClipDuration.toInt()} sec",
-                          style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12)),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("Ground Video Duration:", style: TextStyle(color: Colors.white, fontSize: 12)),
+                          if (_selectedVideoDuration > 0)
+                            Text(
+                              "कुल फ़ुटेज: ${(_selectedVideoDuration / 60).toStringAsFixed(1)} min (${_selectedVideoDuration.toInt()}s)",
+                              style: const TextStyle(color: Colors.white38, fontSize: 10),
+                            ),
+                        ],
+                      ),
+                      Text(
+                        "${_config.groundClipDuration.toInt()}s (${(_config.groundClipDuration / 60).toStringAsFixed(1)} min)",
+                        style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ],
                   ),
                   Slider(
-                    value: _config.groundClipDuration,
+                    value: _config.groundClipDuration.clamp(3.0, _groundSliderMax),
                     min: 3,
-                    max: 120,
-                    divisions: 117,
+                    max: _groundSliderMax,
+                    divisions: (_groundSliderMax - 3).toInt().clamp(1, 1000),
                     activeColor: Colors.redAccent,
                     onChanged: (val) => setState(() => _config.groundClipDuration = val),
                   ),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      _buildDurationChip("10s", 10.0),
+                      _buildDurationChip("30s", 30.0),
+                      _buildDurationChip("1 min", 60.0),
+                      _buildDurationChip("2 min", 120.0),
+                      _buildDurationChip("5 min", 300.0),
+                      _buildDurationChip("10 min", 600.0),
+                      if (_selectedVideoDuration > 0)
+                        _buildDurationChip("Full Video", _selectedVideoDuration),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text(
@@ -2288,6 +2531,34 @@ class _StudioScreenState extends State<StudioScreen> {
       value: value,
       activeColor: Colors.redAccent,
       onChanged: onChanged,
+    );
+  }
+
+  Widget _buildDurationChip(String label, double seconds) {
+    final effectiveSeconds = seconds.clamp(3.0, _groundSliderMax);
+    final isSelected = (_config.groundClipDuration - effectiveSeconds).abs() < 1.0;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _config.groundClipDuration = effectiveSeconds;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.redAccent : const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: isSelected ? Colors.redAccent : Colors.white24),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 }

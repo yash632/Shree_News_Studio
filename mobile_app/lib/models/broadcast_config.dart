@@ -62,7 +62,7 @@ class BroadcastConfig {
     this.enableAnchor = false,
     this.enableTicker = true,
     List<String>? sidebarItems,
-    this.outroText = "अभी के लिए इतना ही। देश और दुनिया की सभी बड़ी खबरों के लिए देखते रहिए श्री NEWS 24x7।",
+    this.outroText = "अभी के लिए इतना ही। देश और दुनिया की सभी बड़ी खबरों के लिए देखते रहिए श्री NEWS Twenty Four by Seven।",
     this.customLogoPath,
   }) : sidebarItems = sidebarItems ?? [
           "भोपाल से इस वक्त की बड़ी खबर",

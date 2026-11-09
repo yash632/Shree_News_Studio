@@ -45,6 +45,8 @@ class VideoEngineService {
     required String overlayPath,
     required BroadcastConfig config,
     String? outroAudioPath,
+    String? introVideoPath,
+    String? outroVideoPath,
     required Function(double progress, String status) onProgress,
   }) async {
     onProgress(0.05, "Analyzing media streams...");
@@ -124,6 +126,33 @@ class VideoEngineService {
       outroInIdx = nextInputIdx++;
       inputArgs.addAll(['-i', outroAudioPath]);
     }
+
+    // Intro Stinger (TV Channel Logo Opener)
+    int? introStingerInIdx;
+    double introStingerDur = 0.0;
+    bool introHasAudio = false;
+    final hasIntroStinger = introVideoPath != null && introVideoPath.isNotEmpty && File(introVideoPath).existsSync();
+    if (hasIntroStinger) {
+      introStingerInIdx = nextInputIdx++;
+      inputArgs.addAll(['-i', introVideoPath]);
+      introStingerDur = await getDuration(introVideoPath);
+      introHasAudio = await hasAudio(introVideoPath);
+    }
+
+    // Outro Stinger (TV Channel Logo Closer)
+    int? outroStingerInIdx;
+    double outroStingerDur = 0.0;
+    bool outroHasAudio = false;
+    final hasOutroStinger = outroVideoPath != null && outroVideoPath.isNotEmpty && File(outroVideoPath).existsSync();
+    if (hasOutroStinger) {
+      outroStingerInIdx = nextInputIdx++;
+      inputArgs.addAll(['-i', outroVideoPath]);
+      outroStingerDur = await getDuration(outroVideoPath);
+      outroHasAudio = await hasAudio(outroVideoPath);
+    }
+
+    final hasStingers = hasIntroStinger || hasOutroStinger;
+    final totalOutputDuration = targetDuration + (hasIntroStinger ? introStingerDur : 0.0) + (hasOutroStinger ? outroStingerDur : 0.0);
 
     int groundVidInIdx = 0;
     int outroVidInIdx = 0;
@@ -219,13 +248,16 @@ class VideoEngineService {
       baseVideo = "[0:v]";
     }
 
+    final vNewsTag = hasStingers ? "[v_news_body]" : "[vout]";
+    final aNewsTag = hasStingers ? "[a_news_body]" : "[aout]";
+
     // Scaling & framing logic
     if (config.frameScale >= 250.0) {
       // Full screen footage behind graphics
       vFilters.add(
         "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
         "crop=$targetW:$targetH,setsar=1[vbase];"
-        "[vbase][$overlayInIdx:v]overlay=0:0[vout]",
+        "[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag",
       );
     } else {
       // Framed inside broadcast window
@@ -248,7 +280,7 @@ class VideoEngineService {
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
         vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
-        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
+        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag");
       } else {
         // 9:16 Portrait Framed
         final topBound = config.enableTopBar ? 340.0 : 20.0;
@@ -280,7 +312,7 @@ class VideoEngineService {
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
         vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
-        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
+        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag");
       }
     }
 
@@ -291,9 +323,9 @@ class VideoEngineService {
     if (!hasMainAudio) {
       // No voiceover script: play footage sound directly (or silence if video has no audio)
       if (videoHasAudio) {
-        aFilters.add("[0:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
+        aFilters.add("[0:a]aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
       } else {
-        aFilters.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)}[aout]");
+        aFilters.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)}$aNewsTag");
       }
     } else if (!videoHasAudio || config.audioMixMode == "voiceover_only") {
       // Voiceover only or silent footage
@@ -301,14 +333,14 @@ class VideoEngineService {
         aFilters.add(
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
-          "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[aout]",
+          "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1$aNewsTag",
         );
       } else if (config.audioMixMode == "intro_then_ground") {
         aFilters.add(
-          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[aout]",
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}$aNewsTag",
         );
       } else {
-        aFilters.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
+        aFilters.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
       }
     } else {
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
@@ -317,21 +349,50 @@ class VideoEngineService {
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-          "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
+          "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0$aNewsTag",
         );
       } else if (config.audioMixMode == "intro_then_ground") {
         aFilters.add(
           "[0:a]volume='if(lt(t,${audioDur.toStringAsFixed(2)}),${introVol.toStringAsFixed(2)},1.0)':eval=frame[a_seq];"
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[a_pad];"
-          "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
+          "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0$aNewsTag",
         );
       } else {
         // Mode 1: voiceover_ambient
         aFilters.add(
           "[0:a]volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
           "[$mainAudioInIdx:a]volume=1.0[vca];"
-          "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]",
+          "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0$aNewsTag",
         );
+      }
+    }
+
+    // Connect TV Channel Stinger Videos (Intro & Outro Full Screen)
+    if (hasStingers) {
+      if (hasIntroStinger) {
+        vFilters.add("[$introStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[v_intro_stinger]");
+        if (introHasAudio) {
+          aFilters.add("[$introStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_intro_stinger]");
+        } else {
+          aFilters.add("aevalsrc=0:d=${introStingerDur.toStringAsFixed(2)}:s=44100[a_intro_stinger]");
+        }
+      }
+
+      if (hasOutroStinger) {
+        vFilters.add("[$outroStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[v_outro_stinger]");
+        if (outroHasAudio) {
+          aFilters.add("[$outroStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_outro_stinger]");
+        } else {
+          aFilters.add("aevalsrc=0:d=${outroStingerDur.toStringAsFixed(2)}:s=44100[a_outro_stinger]");
+        }
+      }
+
+      if (hasIntroStinger && hasOutroStinger) {
+        vFilters.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=3:v=1:a=1[vout][aout]");
+      } else if (hasIntroStinger) {
+        vFilters.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body]concat=n=2:v=1:a=1[vout][aout]");
+      } else if (hasOutroStinger) {
+        vFilters.add("[v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=2:v=1:a=1[vout][aout]");
       }
     }
 
@@ -350,7 +411,7 @@ class VideoEngineService {
       "-c:a", "aac",
       "-b:a", "192k",
       "-pix_fmt", "yuv420p",
-      "-t", targetDuration.toStringAsFixed(2),
+      "-t", totalOutputDuration.toStringAsFixed(2),
       "-movflags", "+faststart",
       outputPath,
     ];
@@ -359,9 +420,9 @@ class VideoEngineService {
 
     FFmpegKitConfig.enableStatisticsCallback((stats) {
       final timeMs = stats.getTime();
-      if (timeMs > 0 && targetDuration > 0) {
+      if (timeMs > 0 && totalOutputDuration > 0) {
         final currentSec = timeMs / 1000.0;
-        final p = 0.35 + ((currentSec / targetDuration) * 0.60).clamp(0.0, 0.60);
+        final p = 0.35 + ((currentSec / totalOutputDuration) * 0.60).clamp(0.0, 0.60);
         onProgress(p, "Rendering video with mobile GPU: ${(p * 100).toInt()}%...");
       }
     });
