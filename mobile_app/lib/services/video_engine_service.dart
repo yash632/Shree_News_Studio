@@ -202,7 +202,7 @@ class VideoEngineService {
         final vidX = (x * scaleX).round();
         final vidY = (y * scaleY).round();
 
-        vFilters.add("color=c=#000000:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        vFilters.add("color=c=#800101:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
         vFilters.add(
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );

@@ -32,7 +32,7 @@ body{
   transform-origin:top left;
   position:absolute;
 }
-.poster{position:relative;width:941px;height:1672px;overflow:hidden;font-family:'Hind','Noto Sans Devanagari',sans-serif;background:#fff url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat}
+.poster{position:relative;width:941px;height:1672px;overflow:hidden;font-family:'Hind','Noto Sans Devanagari',sans-serif;background:radial-gradient(ellipse at 50% 40%, #b30202 0%, #800101 45%, #4a0000 100%)}
 .a{position:absolute}
 /* text: left + vertical-centre are exact; font-size auto-fits to data-w (px width) */
 .t{position:absolute;white-space:nowrap;transform:translateY(-50%);line-height:1.15;font-weight:700;z-index:20}
@@ -40,16 +40,7 @@ body{
 .rc{font-family:'Roboto Condensed','Arial Narrow',sans-serif;font-weight:700}
 
 /* ===== TOP BACKGROUND ===== */
-.topbg{left:0;top:0;width:941px;height:352px;background:url('/static/assets/Glossy Red News Broadcast Waves.png') center/cover no-repeat;
-/*
- background:
-  radial-gradient(ellipse 150px 110px at 60px 110px,#fff,transparent 80%),
-  radial-gradient(ellipse 260px 70px at 470px 215px,rgba(215,50,160,.75),transparent 80%),
-  radial-gradient(ellipse 330px 130px at 500px 0,rgba(110,55,130,.95),transparent 75%),
-  radial-gradient(ellipse 240px 110px at 640px 0,rgba(155,25,75,.95),transparent 75%),
-  linear-gradient(180deg,rgba(255,255,255,0) 60%,rgba(240,150,185,.9) 100%),
-  linear-gradient(90deg,#ebc9d5 0%,#dca2ba 18%,#bd7a9b 34%,#a35a8a 50%,#c57a98 66%,#d9a1b3 85%,#cc96a9 100%)*/
-}
+.topbg{left:0;top:0;width:941px;height:352px;background:linear-gradient(180deg, #99000a 0%, #bd0202 50%, #800101 100%);}
 /* title */
 .title{left:22px;top:64px;width:588px;height:117px;border-radius:11px;z-index:10;border:3px solid #fff;overflow:hidden;
  background:linear-gradient(180deg,#fdd12c 0%,#fcbc08 45%,#f7a504 100%);
@@ -73,14 +64,12 @@ body{
 .globe{border-radius:50%;background:radial-gradient(circle at 35% 30%,#7fb2ea,#2a5da6 45%,#071d44 85%)}
 
 /* ===== RED SECTION ===== */
-.redBg{left:0;top:352px;width:941px;height:1108px;background:transparent;}
-/*
+.redBg{left:0;top:352px;width:941px;height:1108px;
  background:
-  radial-gradient(ellipse 520px 12px at 50% 14px,rgba(255,170,180,.95),transparent 90%),
-  radial-gradient(ellipse 480px 12px at 50% 776px,rgba(255,110,125,.95),transparent 90%),
-  radial-gradient(ellipse 130px 220px at 0 250px,rgba(225,10,5,.85),transparent 90%),
-  radial-gradient(ellipse 120px 200px at 941px 70px,rgba(190,0,8,.9),transparent 90%),
-  linear-gradient(180deg,#8d010b 0%,#a90003 5%,#b30202 25%,#930100 50%,#790100 72%,#8a0000 100%)*/
+  radial-gradient(ellipse 520px 80px at 50% 14px,rgba(255,80,100,.65),transparent 90%),
+  radial-gradient(ellipse 480px 100px at 50% 776px,rgba(255,80,100,.55),transparent 90%),
+  linear-gradient(180deg,#8d010b 0%,#a90003 15%,#b30202 35%,#930100 65%,#790100 85%,#8a0000 100%);
+}
 
 .frame{left:22px;top:385px;width:898px;height:717px;border-radius:0;padding:0;z-index:1;overflow:hidden;
  background:transparent;box-shadow:none;border:none;}
@@ -226,9 +215,11 @@ function fitText(){
 function fitScreen(){
   var w=document.getElementById('wrap');
   if(!w) return;
-  var s=Math.min(window.innerWidth/941, window.innerHeight/1672);
-  var leftOffset = Math.max(0, (window.innerWidth - 941 * s) / 2);
-  var topOffset = Math.max(0, (window.innerHeight - 1672 * s) / 2);
+  var vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  var vh = window.innerHeight || document.documentElement.clientHeight || 640;
+  var s = Math.min(vw/941, vh/1672);
+  var leftOffset = Math.max(0, (vw - 941 * s) / 2);
+  var topOffset = Math.max(0, (vh - 1672 * s) / 2);
   w.style.transform='scale('+s+')';
   w.style.transformOrigin='top left';
   w.style.position='absolute';
@@ -237,6 +228,7 @@ function fitScreen(){
   w.style.width='941px';
   w.style.height='1672px';
 }
+setInterval(fitScreen, 500);
 function init(){ fitText(); fitScreen(); }
 function setVisible(id, visible){
   var el=document.getElementById(id);
@@ -289,7 +281,7 @@ function setPreviewData(data){
   if(t1) t1.textContent='';
   if(t2) t2.textContent='';
   var tickerText=document.getElementById('tickerText');
-  var tVal=(data.ticker||'').trim()||'भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर';
+  var tVal=(data.ticker||data.tickerText||'').trim()||'भोपाल | इंदौर | ग्वालियर | जबलपुर | उज्जैन | सागर | रीवा | और देश-दुनिया की हर खबर';
   if(tickerText){
     tickerText.innerHTML='<div class="ticker-roller" id="tickerRoller"><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div><div class="roll-part" style="padding-bottom:28px;">'+tVal+'</div></div>';
     var roller=document.getElementById('tickerRoller');

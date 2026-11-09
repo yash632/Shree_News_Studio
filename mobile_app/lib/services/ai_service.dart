@@ -136,57 +136,75 @@ STRICT RULES:
 
   /// Direct Free Cloud AI Broadcast Engine (Connects to OpenAI-grade LLM without requiring user API key)
   static Future<AiNewsBundle?> _callFreeCloudAi(String cleanTopic) async {
-    const systemPrompt = '''
-आप Shree News 24×7 के वरिष्ठ हिंदी टीवी न्यूज़ एंकर, न्यूज़ एडिटर और प्रोफेशनल ब्रॉडकास्ट स्क्रिप्ट राइटर हैं।
-आपका काम यूज़र द्वारा दिए गए न्यूज़ टॉपिक पर एक वास्तविक भारतीय हिंदी न्यूज़ चैनल (जैसे Aaj Tak, ABP News) की तरह लाइव न्यूज़ बुलेटिन तैयार करना है।
+    final fullPrompt = '''आप Shree News 24x7 के वरिष्ठ हिंदी टीवी न्यूज़ एंकर और चीफ न्यूज़ एडिटर हैं।
+यूज़र आपको फील्ड से आए कच्चे तथ्य, संक्षिप्त जानकारी या रफ नोट्स देगा।
+आपका काम उस जानकारी का पत्रकारिता विश्लेषण करना और एक गंभीर, प्रामाणिक और प्रभावशाली टीवी न्यूज़ पैकेज बनाना है।
 
-STRICT RULES:
-1. भाषा वास्तविक टीवी न्यूज़ एंकर की स्वाभाविक और प्रभावशाली हिंदी हो।
-2. छोटे, सीधे और ऊर्जावान वाक्य लिखें।
-3. केवल और केवल नीचे दिए गए चार सेक्शन्स इसी सटीक फॉर्मेट में आउटपुट दें, कोई अतिरिक्त भूमिका या Markdown न लिखें:
+कड़े निर्देश:
+1. यूज़र के शब्दों की केवल नकल न करें और न ही इसे खाली जगह भरने (placeholder filling) की तरह इस्तेमाल करें।
+2. दी गई जानकारी के आधार पर असली टीवी न्यूज़ चैनल की तरह खुद पत्रकारिता की भाषा में शुद्ध और स्वाभाविक वाक्य संरचना बनाएं।
+3. तथ्यों का सही संदर्भ समझें (उदा. जानवर बोल नहीं सकते, घायलों को अस्पताल में भर्ती कराया गया, पुलिस-प्रशासन सतर्क है आदि)।
+4. कोई भी Markdown (*, #) न लगाएं।
 
+केवल और केवल नीचे दिए गए चार सेक्शन्स इसी फॉर्मेट में लिखें:
 ===HEADLINE===
-(एक प्रभावशाली और संक्षिप्त मुख्य न्यूज़ हेडलाइन, अधिकतम 10 शब्द)
+(1 लाइन की दमदार मुख्य हेडलाइन, 8-10 शब्द)
 
 ===SUB_HEADLINE===
-(मुख्य खबर को स्पष्ट करने वाली एक छोटी सब-हेडलाइन, अधिकतम 14 शब्द)
+(1 लाइन की सब-हेडलाइन जिसमें प्रशासन/अस्पताल/कार्रवाई का मुख्य बिंदु हो, 10-14 शब्द)
 
 ===TICKER===
-(न्यूज़ चैनल के नीचे चलने वाली संक्षिप्त 3-4 अपडेट लाइनें, हर अपडेट को | से अलग करें)
+(न्यूज़ चैनल की निचली पट्टी के लिए 3-4 बिंदु, हर बिंदु के बीच | लगाएं)
 
 ===SCRIPT===
-(न्यूज़ एंकर द्वारा बोली जाने वाली 4 से 6 वाक्यों की प्रोफेशनल लाइव बुलेटिन स्क्रिप्ट। शुरुआत "नमस्कार, इस वक्त की बड़ी खबर..." से करें।)
-''';
+(एंकर द्वारा कैमरे के सामने लाइव बोली जाने वाली 4-5 वाक्यों की लाइव बुलेटिन। शुरुआत "नमस्कार, इस वक्त की बड़ी खबर सामने आ रही है..." से करें। पूरी घटना और प्रशासनिक अपडेट का विवरण दें।)
 
-    final uri = Uri.parse('https://text.pollinations.ai/');
-    final res = await http.post(
-      uri,
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'messages': [
-          {'role': 'system', 'content': systemPrompt},
-          {
-            'role': 'user',
-            'content': 'News Topic: $cleanTopic\nकृपया ऊपर दिए गए चारों सेक्शन्स (HEADLINE, SUB_HEADLINE, TICKER, SCRIPT) हिंदी में तुरंत लिखें।'
+कच्ची जानकारी: $cleanTopic''';
+
+    // 1. Fast Edge GET Request
+    try {
+      final getUri = Uri.parse('https://text.pollinations.ai/${Uri.encodeComponent(fullPrompt)}');
+      final res = await http.get(getUri).timeout(const Duration(seconds: 22));
+      if (res.statusCode == 200 && res.body.isNotEmpty) {
+        final raw = utf8.decode(res.bodyBytes).trim();
+        if (raw.contains('===HEADLINE===') || raw.length > 50) {
+          final bundle = parseAiResponse(raw);
+          if (bundle.headline.isNotEmpty && bundle.script.isNotEmpty) {
+            return bundle;
           }
-        ],
-        'model': 'openai',
-      }),
-    ).timeout(const Duration(seconds: 22));
-
-    if (res.statusCode == 200 && res.body.isNotEmpty) {
-      final raw = utf8.decode(res.bodyBytes).trim();
-      if (raw.isNotEmpty) {
-        if (raw.startsWith('{') && raw.contains('"choices"')) {
-          try {
-            final parsedJson = jsonDecode(raw);
-            final content = parsedJson['choices'][0]['message']['content'].toString().trim();
-            return parseAiResponse(content);
-          } catch (_) {}
         }
-        return parseAiResponse(raw);
       }
-    }
+    } catch (_) {}
+
+    // 2. Direct POST Fallback
+    try {
+      final postUri = Uri.parse('https://text.pollinations.ai/');
+      final res = await http.post(
+        postUri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': [
+            {'role': 'user', 'content': fullPrompt}
+          ],
+          'model': 'openai',
+        }),
+      ).timeout(const Duration(seconds: 20));
+
+      if (res.statusCode == 200 && res.body.isNotEmpty) {
+        final raw = utf8.decode(res.bodyBytes).trim();
+        if (raw.isNotEmpty) {
+          if (raw.startsWith('{') && raw.contains('"choices"')) {
+            try {
+              final parsedJson = jsonDecode(raw);
+              final content = parsedJson['choices'][0]['message']['content'].toString().trim();
+              return parseAiResponse(content);
+            } catch (_) {}
+          }
+          return parseAiResponse(raw);
+        }
+      }
+    } catch (_) {}
+
     return null;
   }
 

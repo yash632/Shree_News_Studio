@@ -248,6 +248,7 @@ class _StudioScreenState extends State<StudioScreen> {
       'anchorEnabled': _config.aspectRatio == "16:9" && _config.enableAnchor,
       'tickerEnabled': _config.enableTicker,
       'tickerTag': _config.tickerTag,
+      'ticker': _config.tickerText,
       'tickerText': _config.tickerText,
       'sidebarItems': sidebarList,
       'frameScale': _config.frameScale,

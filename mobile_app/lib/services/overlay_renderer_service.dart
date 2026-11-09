@@ -34,7 +34,7 @@ class OverlayRendererService {
     final showSidebar = config.enableSidebar;
     final showAnchor = config.enableAnchor;
     final showTicker = config.enableTicker;
-    final brkTop = showTicker ? 765.0 : 897.0;
+    final brkTop = showTicker ? 768.0 : 900.0;
 
     final topNavBottom = showTop ? 148.0 : 0.0;
     final availH = math.max(100.0, brkTop - topNavBottom);
@@ -121,8 +121,8 @@ class OverlayRendererService {
     String? customLogoPath,
   }) async {
     final isVertical = config.aspectRatio == "9:16";
-    final double baseWidth = isVertical ? 1080.0 : 1920.0;
-    final double baseHeight = isVertical ? 1920.0 : 1080.0;
+    final double baseWidth = isVertical ? 941.0 : 1920.0;
+    final double baseHeight = isVertical ? 1672.0 : 1080.0;
 
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
@@ -157,7 +157,7 @@ class OverlayRendererService {
       // 16:9 LANDSCAPE BROADCAST MODE
       // -------------------------------------------------------------
       final layout = calculateFrameLayout(config);
-      final brkTop = config.enableTicker ? 765.0 : 897.0;
+      final brkTop = config.enableTicker ? 768.0 : 900.0;
 
       // 1. Top Bar (Header + Cards + Channel Logo)
       if (config.enableTopBar) {
@@ -243,7 +243,7 @@ class OverlayRendererService {
       // 9:16 VERTICAL REEL / SHORT BROADCAST MODE
       // -------------------------------------------------------------
       final topBound = config.enableTopBar ? 340.0 : 20.0;
-      final brkTop = config.enableTicker ? 1150.0 : 1380.0;
+      final brkTop = config.enableTicker ? 1150.0 : 1320.0;
       final availH = brkTop - topBound;
       final scaleVal = config.frameScale;
       final scale = scaleVal / 100.0;
@@ -253,13 +253,13 @@ class OverlayRendererService {
       double w, h;
       if (scaleVal >= 100.0) {
         final t = math.min(1.0, (scaleVal - 100.0) / 150.0);
-        w = stdW + (1080.0 - stdW) * t;
+        w = stdW + (941.0 - stdW) * t;
         h = stdH + (availH - stdH) * t;
       } else {
         w = stdW * scale;
         h = stdH * scale;
       }
-      final x = (1080.0 - w) / 2.0;
+      final x = (941.0 - w) / 2.0;
       final y = ((topBound + brkTop) / 2.0) - (h / 2.0);
 
       // 1. Portrait Top Bar
@@ -500,36 +500,48 @@ class OverlayRendererService {
     ui.Image? globeImg,
     ui.Image? highwayImg,
   }) {
+    // Top background gradient
+    canvas.drawRect(
+      ui.Rect.fromLTWH(0, 0, 941 * scaleX, 352 * scaleY),
+      ui.Paint()
+        ..shader = ui.Gradient.linear(
+          const ui.Offset(0, 0),
+          ui.Offset(0, 352 * scaleY),
+          const [Color(0xFF99000A), Color(0xFFBD0202), Color(0xFF800101)],
+          const [0.0, 0.5, 1.0],
+        ),
+    );
+
     // Title Box: "आज की बड़ी खबर"
     final pathRed = ui.Path()
-      ..moveTo(20 * scaleX, 40 * scaleY)
-      ..lineTo(360 * scaleX, 40 * scaleY)
-      ..lineTo(320 * scaleX, 180 * scaleY)
-      ..lineTo(20 * scaleX, 180 * scaleY)
+      ..moveTo(22 * scaleX, 64 * scaleY)
+      ..lineTo(304 * scaleX, 64 * scaleY)
+      ..lineTo(270 * scaleX, 181 * scaleY)
+      ..lineTo(22 * scaleX, 181 * scaleY)
       ..close();
     canvas.drawPath(
       pathRed,
       ui.Paint()
         ..shader = ui.Gradient.linear(
-          ui.Offset(20 * scaleX, 40 * scaleY),
-          ui.Offset(360 * scaleX, 180 * scaleY),
+          ui.Offset(22 * scaleX, 64 * scaleY),
+          ui.Offset(304 * scaleX, 181 * scaleY),
           [const Color(0xFFD30202), const Color(0xFF8B0000)],
           const [0.0, 1.0],
         ),
     );
 
     final pathYellow = ui.Path()
-      ..moveTo(360 * scaleX, 40 * scaleY)
-      ..lineTo(680 * scaleX, 40 * scaleY)
-      ..lineTo(640 * scaleX, 180 * scaleY)
-      ..lineTo(320 * scaleX, 180 * scaleY)
+      ..moveTo(288 * scaleX, 64 * scaleY)
+      ..lineTo(610 * scaleX, 64 * scaleY)
+      ..lineTo(576 * scaleX, 181 * scaleY)
+      ..lineTo(270 * scaleX, 181 * scaleY)
       ..close();
     canvas.drawPath(
       pathYellow,
       ui.Paint()
         ..shader = ui.Gradient.linear(
-          ui.Offset(360 * scaleX, 40 * scaleY),
-          ui.Offset(680 * scaleX, 180 * scaleY),
+          ui.Offset(288 * scaleX, 64 * scaleY),
+          ui.Offset(610 * scaleX, 181 * scaleY),
           [const Color(0xFFFFEB3B), const Color(0xFFFBC02D)],
           const [0.0, 1.0],
         ),
@@ -538,76 +550,118 @@ class OverlayRendererService {
     _paintText(
       canvas: canvas,
       text: "आज की",
-      offset: ui.Offset(65 * scaleX, 75 * scaleY),
-      style: TextStyle(color: Colors.white, fontSize: 62 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+      offset: ui.Offset(55 * scaleX, 90 * scaleY),
+      style: TextStyle(color: Colors.white, fontSize: 52 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
     );
     _paintText(
       canvas: canvas,
       text: "बड़ी खबर",
-      offset: ui.Offset(375 * scaleX, 75 * scaleY),
-      style: TextStyle(color: Colors.black, fontSize: 62 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+      offset: ui.Offset(320 * scaleX, 90 * scaleY),
+      style: TextStyle(color: Colors.black, fontSize: 52 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
     );
 
     // Channel Logo Box at Top Right
-    final logoCardX = 700 * scaleX;
-    final logoCardY = 40 * scaleY;
-    final logoCardW = 350 * scaleX;
-    final logoCardH = 140 * scaleY;
+    final logoCardX = 622 * scaleX;
+    final logoCardY = 45 * scaleY;
+    final logoCardW = 310 * scaleX;
+    final logoCardH = 165 * scaleY;
 
     canvas.drawRRect(
-      ui.RRect.fromRectAndRadius(ui.Rect.fromLTWH(logoCardX, logoCardY, logoCardW, logoCardH), ui.Radius.circular(16 * scaleX)),
+      ui.RRect.fromRectAndRadius(ui.Rect.fromLTWH(logoCardX, logoCardY, logoCardW, logoCardH), ui.Radius.circular(24 * scaleX)),
       ui.Paint()..color = Colors.white,
     );
     if (logoImg != null) {
       canvas.drawImageRect(
         logoImg,
         ui.Rect.fromLTWH(0, 0, logoImg.width.toDouble(), logoImg.height.toDouble()),
-        ui.Rect.fromLTWH(logoCardX + 15 * scaleX, logoCardY + 12 * scaleY, logoCardW - 30 * scaleX, logoCardH - 24 * scaleY),
+        ui.Rect.fromLTWH(logoCardX + 10 * scaleX, logoCardY + 8 * scaleY, logoCardW - 20 * scaleX, logoCardH - 16 * scaleY),
         ui.Paint(),
       );
     }
 
-    // 3 Cards Strip at y = 220
-    final cards = [
-      {'img': palaceImg, 'line1': 'प्रदेश की हर खबर', 'line2': 'सबसे पहले'},
-      {'img': globeImg, 'line1': 'देश-दुनिया की', 'line2': 'ताजा अपडेट'},
-      {'img': highwayImg, 'line1': 'आपके शहर की', 'line2': 'हर छोटी-बड़ी खबर'},
-    ];
+    // 3 Cards Strip at y = 228 (Width 941)
+    canvas.drawRect(
+      ui.Rect.fromLTWH(0, 228 * scaleY, 941 * scaleX, 112 * scaleY),
+      ui.Paint()..color = const Color(0xFFFAF2F4),
+    );
 
-    for (int i = 0; i < 3; i++) {
-      final cardX = (20 + i * 350) * scaleX;
-      final cardY = 210 * scaleY;
-      final cardW = 330 * scaleX;
-      final cardH = 100 * scaleY;
-
-      canvas.drawRRect(
-        ui.RRect.fromRectAndRadius(ui.Rect.fromLTWH(cardX, cardY, cardW, cardH), ui.Radius.circular(10 * scaleX)),
-        ui.Paint()..color = Colors.white,
-      );
-
-      final cImg = cards[i]['img'] as ui.Image?;
-      if (cImg != null) {
-        canvas.drawImageRect(
-          cImg,
-          ui.Rect.fromLTWH(0, 0, cImg.width.toDouble(), cImg.height.toDouble()),
-          ui.Rect.fromLTWH(cardX + 10 * scaleX, cardY + 10 * scaleY, 80 * scaleX, 80 * scaleY),
-          ui.Paint(),
-        );
-      }
-
-      _paintText(
-        canvas: canvas,
-        text: cards[i]['line1'] as String,
-        offset: ui.Offset(cardX + 100 * scaleX, cardY + 16 * scaleY),
-        style: TextStyle(color: const Color(0xFF222222), fontSize: 20 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
-      );
-      _paintText(
-        canvas: canvas,
-        text: cards[i]['line2'] as String,
-        offset: ui.Offset(cardX + 100 * scaleX, cardY + 50 * scaleY),
-        style: TextStyle(color: const Color(0xFFCF1620), fontSize: 22 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+    // Card 1: Palace (Left 17)
+    if (palaceImg != null) {
+      canvas.drawImageRect(
+        palaceImg,
+        ui.Rect.fromLTWH(0, 0, palaceImg.width.toDouble(), palaceImg.height.toDouble()),
+        ui.Rect.fromLTWH(17 * scaleX, 240 * scaleY, 118 * scaleX, 88 * scaleY),
+        ui.Paint(),
       );
     }
+    _paintText(
+      canvas: canvas,
+      text: "प्रदेश की हर खबर",
+      offset: ui.Offset(146 * scaleX, 246 * scaleY),
+      style: TextStyle(color: const Color(0xFF222222), fontSize: 24 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
+    );
+    _paintText(
+      canvas: canvas,
+      text: "सबसे पहले",
+      offset: ui.Offset(147 * scaleX, 284 * scaleY),
+      style: TextStyle(color: const Color(0xFFCF1620), fontSize: 26 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+    );
+
+    // Divider 1
+    canvas.drawRect(
+      ui.Rect.fromLTWH(323 * scaleX, 238 * scaleY, 4 * scaleX, 92 * scaleY),
+      ui.Paint()..color = const Color(0xFFB8121F),
+    );
+
+    // Card 2: Globe (Left 337)
+    if (globeImg != null) {
+      canvas.drawImageRect(
+        globeImg,
+        ui.Rect.fromLTWH(0, 0, globeImg.width.toDouble(), globeImg.height.toDouble()),
+        ui.Rect.fromLTWH(337 * scaleX, 243 * scaleY, 82 * scaleX, 82 * scaleY),
+        ui.Paint(),
+      );
+    }
+    _paintText(
+      canvas: canvas,
+      text: "देश-दुनिया की",
+      offset: ui.Offset(433 * scaleX, 246 * scaleY),
+      style: TextStyle(color: const Color(0xFF222222), fontSize: 24 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
+    );
+    _paintText(
+      canvas: canvas,
+      text: "ताजा अपडेट",
+      offset: ui.Offset(433 * scaleX, 284 * scaleY),
+      style: TextStyle(color: const Color(0xFFCF1620), fontSize: 26 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+    );
+
+    // Divider 2
+    canvas.drawRect(
+      ui.Rect.fromLTWH(597 * scaleX, 238 * scaleY, 4 * scaleX, 92 * scaleY),
+      ui.Paint()..color = const Color(0xFFB8121F),
+    );
+
+    // Card 3: Highway (Left 611)
+    if (highwayImg != null) {
+      canvas.drawImageRect(
+        highwayImg,
+        ui.Rect.fromLTWH(0, 0, highwayImg.width.toDouble(), highwayImg.height.toDouble()),
+        ui.Rect.fromLTWH(611 * scaleX, 240 * scaleY, 120 * scaleX, 88 * scaleY),
+        ui.Paint(),
+      );
+    }
+    _paintText(
+      canvas: canvas,
+      text: "आपके शहर की",
+      offset: ui.Offset(744 * scaleX, 246 * scaleY),
+      style: TextStyle(color: const Color(0xFF222222), fontSize: 24 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
+    );
+    _paintText(
+      canvas: canvas,
+      text: "हर छोटी-बड़ी खबर",
+      offset: ui.Offset(742 * scaleX, 284 * scaleY),
+      style: TextStyle(color: const Color(0xFFCF1620), fontSize: 26 * scaleY, fontWeight: FontWeight.w900, fontFamily: 'Hind'),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -776,149 +830,304 @@ class OverlayRendererService {
     required String subHeadlineText,
   }) {
     final double bandY = brkTop * scaleY;
-    final double totalW = (isVertical ? 1080.0 : 1920.0) * scaleX;
-    final double chevW = (isVertical ? 380.0 : 440.0) * scaleX;
-    final double redBarH = 105 * scaleY;
-    final double whiteBarH = 75 * scaleY;
 
-    // 1. Red Headline Bar
-    final redRect = ui.Rect.fromLTWH(chevW - 40 * scaleX, bandY, totalW - (chevW - 40 * scaleX), redBarH);
-    canvas.drawRect(
-      redRect,
-      ui.Paint()
-        ..shader = ui.Gradient.linear(
-          ui.Offset(redRect.left, bandY),
-          ui.Offset(redRect.left, bandY + redBarH),
-          [const Color(0xFFE60000), const Color(0xFFBA0000), const Color(0xFF7A0000)],
-          const [0.0, 0.5, 1.0],
+    if (isVertical) {
+      // -----------------------------------------------------------------------
+      // 9:16 PORTRAIT BREAKING NEWS BAND (941x1672 Canvas)
+      // -----------------------------------------------------------------------
+      final double totalW = 941.0 * scaleX;
+      final double redBarH = 206 * scaleY;
+      final double whiteBarH = (brkTop >= 1300.0 ? 110.0 : 96.0) * scaleY;
+      final double chevW = 320 * scaleX;
+
+      // 1. Red Headline Bar Base (Width: 941)
+      final redRect = ui.Rect.fromLTWH(0, bandY, totalW, redBarH);
+      canvas.drawRRect(
+        ui.RRect.fromRectAndCorners(
+          redRect,
+          topLeft: ui.Radius.circular(28 * scaleX),
+          topRight: ui.Radius.circular(28 * scaleX),
         ),
-    );
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(0, bandY),
+            ui.Offset(0, bandY + redBarH),
+            const [Color(0xFFE0060D), Color(0xFFC10201), Color(0xFF8A0303)],
+            const [0.0, 0.7, 1.0],
+          ),
+      );
 
-    // Subtle Top Highlight on Red Bar
-    canvas.drawLine(
-      ui.Offset(redRect.left, bandY),
-      ui.Offset(totalW, bandY),
-      ui.Paint()..color = const Color(0xFFFF8A90)..strokeWidth = 2 * scaleY,
-    );
+      // 2. 3D Golden & Red Chevron Badge
+      final chevPathOuter = ui.Path()
+        ..moveTo(0, bandY)
+        ..lineTo(chevW - 55 * scaleX, bandY)
+        ..lineTo(chevW, bandY + (redBarH / 2))
+        ..lineTo(chevW - 55 * scaleX, bandY + redBarH)
+        ..lineTo(0, bandY + redBarH)
+        ..close();
+      canvas.drawPath(
+        chevPathOuter,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(0, bandY),
+            ui.Offset(chevW, bandY + redBarH),
+            const [Color(0xFFFCDF6B), Color(0xFFF2A020), Color(0xFFD77A10)],
+            const [0.0, 0.6, 1.0],
+          ),
+      );
 
-    // 2. White Sub-Headline Bar
-    final whiteRect = ui.Rect.fromLTWH(chevW - 40 * scaleX, bandY + redBarH, totalW - (chevW - 40 * scaleX), whiteBarH);
-    canvas.drawRect(
-      whiteRect,
-      ui.Paint()
-        ..shader = ui.Gradient.linear(
-          ui.Offset(whiteRect.left, bandY + redBarH),
-          ui.Offset(whiteRect.left, bandY + redBarH + whiteBarH),
-          [const Color(0xFFFFFFFF), const Color(0xFFEBEBEB)],
-          const [0.0, 1.0],
-        ),
-    );
+      final chevPathInner = ui.Path()
+        ..moveTo(0, bandY + 4 * scaleY)
+        ..lineTo(chevW - 65 * scaleX, bandY + 4 * scaleY)
+        ..lineTo(chevW - 10 * scaleX, bandY + (redBarH / 2))
+        ..lineTo(chevW - 65 * scaleX, bandY + redBarH - 4 * scaleY)
+        ..lineTo(0, bandY + redBarH - 4 * scaleY)
+        ..close();
+      canvas.drawPath(
+        chevPathInner,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(0, bandY + 4 * scaleY),
+            ui.Offset(chevW, bandY + redBarH - 4 * scaleY),
+            const [Color(0xFFB01A09), Color(0xFF9C0201), Color(0xFF7B0000)],
+            const [0.0, 0.45, 1.0],
+          ),
+      );
 
-    // 3. 3D Golden & Red Chevron Badge
-    final chevPathOuter = ui.Path()
-      ..moveTo(0, bandY)
-      ..lineTo(chevW - 70 * scaleX, bandY)
-      ..lineTo(chevW, bandY + 90 * scaleY)
-      ..lineTo(chevW - 70 * scaleX, bandY + 180 * scaleY)
-      ..lineTo(0, bandY + 180 * scaleY)
-      ..close();
-    canvas.drawPath(
-      chevPathOuter,
-      ui.Paint()
-        ..shader = ui.Gradient.linear(
-          ui.Offset(0, bandY),
-          ui.Offset(chevW, bandY + 180 * scaleY),
-          [const Color(0xFFFFEB3B), const Color(0xFFFFA000), const Color(0xFFE65100)],
-          const [0.0, 0.5, 1.0],
-        ),
-    );
-
-    final chevPathInner = ui.Path()
-      ..moveTo(0, bandY + 8 * scaleY)
-      ..lineTo(chevW - 85 * scaleX, bandY + 8 * scaleY)
-      ..lineTo(chevW - 20 * scaleX, bandY + 90 * scaleY)
-      ..lineTo(chevW - 85 * scaleX, bandY + 172 * scaleY)
-      ..lineTo(0, bandY + 172 * scaleY)
-      ..close();
-    canvas.drawPath(
-      chevPathInner,
-      ui.Paint()
-        ..shader = ui.Gradient.linear(
-          ui.Offset(0, bandY + 8 * scaleY),
-          ui.Offset(chevW, bandY + 172 * scaleY),
-          [const Color(0xFFD30202), const Color(0xFF900000), const Color(0xFF5A0000)],
-          const [0.0, 0.5, 1.0],
-        ),
-    );
-
-    // Text: BREAKING
-    _paintText(
-      canvas: canvas,
-      text: "BREAKING",
-      offset: ui.Offset(45 * scaleX, bandY + 22 * scaleY),
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: (isVertical ? 54 : 58) * scaleY,
-        fontWeight: FontWeight.w900,
-        fontFamily: 'Hind',
-        letterSpacing: 2 * scaleX,
-        shadows: const [Shadow(color: Color(0xAA000000), offset: Offset(0, 4), blurRadius: 6)],
-      ),
-    );
-
-    // Text: NEWS
-    _paintText(
-      canvas: canvas,
-      text: "NEWS",
-      offset: ui.Offset(78 * scaleX, bandY + 92 * scaleY),
-      style: TextStyle(
-        color: const Color(0xFFFFD54F),
-        fontSize: (isVertical ? 74 : 78) * scaleY,
-        fontWeight: FontWeight.w900,
-        fontFamily: 'Hind',
-        letterSpacing: 3 * scaleX,
-        shadows: const [Shadow(color: Color(0xDD4A0000), offset: Offset(0, 4), blurRadius: 4)],
-      ),
-    );
-
-    // 4. Headline Text
-    final hlText = headlineText.trim().isNotEmpty ? headlineText.trim() : "श्री न्यूज़ 24x7 में आपका स्वागत है";
-    final hlPainter = TextPainter(
-      text: TextSpan(
-        text: hlText,
+      // Text: BREAKING
+      _paintText(
+        canvas: canvas,
+        text: "BREAKING",
+        offset: ui.Offset(38 * scaleX, bandY + 36 * scaleY),
         style: TextStyle(
           color: Colors.white,
-          fontSize: (isVertical ? 44 : 46) * scaleY,
-          fontWeight: FontWeight.w800,
+          fontSize: 48 * scaleY,
+          fontWeight: FontWeight.w900,
           fontFamily: 'Hind',
-          shadows: const [Shadow(color: Color(0x99000000), offset: Offset(0, 3), blurRadius: 4)],
+          letterSpacing: 2 * scaleX,
+          shadows: const [Shadow(color: Color(0xAA000000), offset: Offset(0, 3), blurRadius: 4)],
         ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: isVertical ? 2 : 1,
-      ellipsis: '...',
-    );
-    hlPainter.layout(maxWidth: totalW - chevW - 30 * scaleX);
-    hlPainter.paint(canvas, ui.Offset(chevW + 20 * scaleX, bandY + 22 * scaleY));
+      );
 
-    // 5. Sub-Headline Text
-    final subText = subHeadlineText.trim().isNotEmpty ? subHeadlineText.trim() : "हम आपके लिए लाए हैं ताज़ा समाचार";
-    final subPainter = TextPainter(
-      text: TextSpan(
-        text: subText,
+      // Text: NEWS
+      _paintText(
+        canvas: canvas,
+        text: "NEWS",
+        offset: ui.Offset(64 * scaleX, bandY + 110 * scaleY),
         style: TextStyle(
-          color: const Color(0xFF141414),
-          fontSize: (isVertical ? 32 : 34) * scaleY,
-          fontWeight: FontWeight.w700,
+          color: const Color(0xFFFFD54F),
+          fontSize: 66 * scaleY,
+          fontWeight: FontWeight.w900,
           fontFamily: 'Hind',
+          letterSpacing: 3 * scaleX,
+          shadows: const [Shadow(color: Color(0xDD4A0000), offset: Offset(0, 3), blurRadius: 4)],
         ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      ellipsis: '...',
-    );
-    subPainter.layout(maxWidth: totalW - chevW - 30 * scaleX);
-    subPainter.paint(canvas, ui.Offset(chevW + 20 * scaleX, bandY + redBarH + 16 * scaleY));
+      );
+
+      // Headline Text (2 lines maximum, nicely fitted in red bar)
+      final hlText = headlineText.trim().isNotEmpty ? headlineText.trim() : "भोपाल में आज तेज बारिश, कई इलाकों में जलभराव";
+      final hlPainter = TextPainter(
+        text: TextSpan(
+          text: hlText,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 44 * scaleY,
+            fontWeight: FontWeight.w800,
+            fontFamily: 'Hind',
+            height: 1.25,
+            shadows: const [Shadow(color: Color(0x99000000), offset: Offset(0, 3), blurRadius: 4)],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 2,
+        ellipsis: '...',
+      );
+      hlPainter.layout(maxWidth: totalW - chevW - 30 * scaleX);
+      hlPainter.paint(canvas, ui.Offset(chevW + 16 * scaleX, bandY + 28 * scaleY));
+
+      // 3. White Sub-Headline Bar (Full-width underneath red bar)
+      final whiteRect = ui.Rect.fromLTWH(8 * scaleX, bandY + redBarH - 2 * scaleY, totalW - 16 * scaleX, whiteBarH);
+      canvas.drawRRect(
+        ui.RRect.fromRectAndCorners(
+          whiteRect,
+          bottomLeft: ui.Radius.circular(24 * scaleX),
+          bottomRight: ui.Radius.circular(24 * scaleX),
+        ),
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(whiteRect.left, whiteRect.top),
+            ui.Offset(whiteRect.left, whiteRect.bottom),
+            const [Color(0xFFE9E7E9), Color(0xFFEFEEEF), Color(0xFFFDFBFB)],
+            const [0.0, 0.5, 1.0],
+          ),
+      );
+
+      // Sub-Headline Text
+      final subText = subHeadlineText.trim().isNotEmpty ? subHeadlineText.trim() : "मौसम विभाग ने अगले 24 घंटे के लिए जारी किया अलर्ट";
+      final subPainter = TextPainter(
+        text: TextSpan(
+          text: subText,
+          style: TextStyle(
+            color: const Color(0xFF111111),
+            fontSize: 34 * scaleY,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Hind',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '...',
+      );
+      subPainter.layout(maxWidth: totalW - 64 * scaleX);
+      subPainter.paint(canvas, ui.Offset(32 * scaleX, bandY + redBarH + 24 * scaleY));
+    } else {
+      // -----------------------------------------------------------------------
+      // 16:9 LANDSCAPE BREAKING NEWS BAND (1920x1080 Canvas)
+      // -----------------------------------------------------------------------
+      final double totalW = 1920.0 * scaleX;
+      final double chevW = 440.0 * scaleX;
+      final double redBarH = 105 * scaleY;
+      final double whiteBarH = 75 * scaleY;
+
+      // 1. Red Headline Bar
+      final redRect = ui.Rect.fromLTWH(chevW - 40 * scaleX, bandY, totalW - (chevW - 40 * scaleX), redBarH);
+      canvas.drawRect(
+        redRect,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(redRect.left, bandY),
+            ui.Offset(redRect.left, bandY + redBarH),
+            [const Color(0xFFE60000), const Color(0xFFBA0000), const Color(0xFF7A0000)],
+            const [0.0, 0.5, 1.0],
+          ),
+      );
+
+      // Top Highlight
+      canvas.drawLine(
+        ui.Offset(redRect.left, bandY),
+        ui.Offset(totalW, bandY),
+        ui.Paint()..color = const Color(0xFFFF8A90)..strokeWidth = 2 * scaleY,
+      );
+
+      // 2. White Sub-Headline Bar
+      final whiteRect = ui.Rect.fromLTWH(chevW - 40 * scaleX, bandY + redBarH, totalW - (chevW - 40 * scaleX), whiteBarH);
+      canvas.drawRect(
+        whiteRect,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(whiteRect.left, bandY + redBarH),
+            ui.Offset(whiteRect.left, bandY + redBarH + whiteBarH),
+            [const Color(0xFFFFFFFF), const Color(0xFFEBEBEB)],
+            const [0.0, 1.0],
+          ),
+      );
+
+      // 3. 3D Golden & Red Chevron Badge
+      final chevPathOuter = ui.Path()
+        ..moveTo(0, bandY)
+        ..lineTo(chevW - 70 * scaleX, bandY)
+        ..lineTo(chevW, bandY + 90 * scaleY)
+        ..lineTo(chevW - 70 * scaleX, bandY + 180 * scaleY)
+        ..lineTo(0, bandY + 180 * scaleY)
+        ..close();
+      canvas.drawPath(
+        chevPathOuter,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(0, bandY),
+            ui.Offset(chevW, bandY + 180 * scaleY),
+            [const Color(0xFFFFEB3B), const Color(0xFFFFA000), const Color(0xFFE65100)],
+            const [0.0, 0.5, 1.0],
+          ),
+      );
+
+      final chevPathInner = ui.Path()
+        ..moveTo(0, bandY + 8 * scaleY)
+        ..lineTo(chevW - 85 * scaleX, bandY + 8 * scaleY)
+        ..lineTo(chevW - 20 * scaleX, bandY + 90 * scaleY)
+        ..lineTo(chevW - 85 * scaleX, bandY + 172 * scaleY)
+        ..lineTo(0, bandY + 172 * scaleY)
+        ..close();
+      canvas.drawPath(
+        chevPathInner,
+        ui.Paint()
+          ..shader = ui.Gradient.linear(
+            ui.Offset(0, bandY + 8 * scaleY),
+            ui.Offset(chevW, bandY + 172 * scaleY),
+            [const Color(0xFFD30202), const Color(0xFF900000), const Color(0xFF5A0000)],
+            const [0.0, 0.5, 1.0],
+          ),
+      );
+
+      // Text: BREAKING
+      _paintText(
+        canvas: canvas,
+        text: "BREAKING",
+        offset: ui.Offset(45 * scaleX, bandY + 22 * scaleY),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 58 * scaleY,
+          fontWeight: FontWeight.w900,
+          fontFamily: 'Hind',
+          letterSpacing: 2 * scaleX,
+          shadows: const [Shadow(color: Color(0xAA000000), offset: Offset(0, 4), blurRadius: 6)],
+        ),
+      );
+
+      // Text: NEWS
+      _paintText(
+        canvas: canvas,
+        text: "NEWS",
+        offset: ui.Offset(78 * scaleX, bandY + 92 * scaleY),
+        style: TextStyle(
+          color: const Color(0xFFFFD54F),
+          fontSize: 78 * scaleY,
+          fontWeight: FontWeight.w900,
+          fontFamily: 'Hind',
+          letterSpacing: 3 * scaleX,
+          shadows: const [Shadow(color: Color(0xDD4A0000), offset: Offset(0, 4), blurRadius: 4)],
+        ),
+      );
+
+      // Headline Text
+      final hlText = headlineText.trim().isNotEmpty ? headlineText.trim() : "श्री न्यूज़ 24x7 में आपका स्वागत है";
+      final hlPainter = TextPainter(
+        text: TextSpan(
+          text: hlText,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 46 * scaleY,
+            fontWeight: FontWeight.w800,
+            fontFamily: 'Hind',
+            shadows: const [Shadow(color: Color(0x99000000), offset: Offset(0, 3), blurRadius: 4)],
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '...',
+      );
+      hlPainter.layout(maxWidth: totalW - chevW - 30 * scaleX);
+      hlPainter.paint(canvas, ui.Offset(chevW + 20 * scaleX, bandY + 22 * scaleY));
+
+      // Sub-Headline Text
+      final subText = subHeadlineText.trim().isNotEmpty ? subHeadlineText.trim() : "हम आपके लिए लाए हैं ताज़ा समाचार";
+      final subPainter = TextPainter(
+        text: TextSpan(
+          text: subText,
+          style: TextStyle(
+            color: const Color(0xFF141414),
+            fontSize: 34 * scaleY,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'Hind',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '...',
+      );
+      subPainter.layout(maxWidth: totalW - chevW - 30 * scaleX);
+      subPainter.paint(canvas, ui.Offset(chevW + 20 * scaleX, bandY + redBarH + 16 * scaleY));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1028,7 +1237,7 @@ class OverlayRendererService {
   }
 
   // ---------------------------------------------------------------------------
-  // 7. PORTRAIT BOTTOM TICKER
+  // 7. PORTRAIT BOTTOM TICKER (941x1672 Canvas)
   // ---------------------------------------------------------------------------
   static void _drawPortraitBottomTicker({
     required ui.Canvas canvas,
@@ -1041,16 +1250,29 @@ class OverlayRendererService {
     required String tickerTag,
     required String tickerText,
   }) {
+    const underY = 1455.0;
     const tickerY = 1538.0;
     final double tagLeft = enableDateTime ? 268.0 * scaleX : 15.0 * scaleX;
     final double tagWidth = enableDateTime ? 168.0 * scaleX : 200.0 * scaleX;
     final double tickerLeft = enableDateTime ? 436.0 * scaleX : 215.0 * scaleX;
-    final double tickerWidth = (1080.0 * scaleX) - tickerLeft - 15.0 * scaleX;
+    final double tickerWidth = (941.0 * scaleX) - tickerLeft - 15.0 * scaleX;
 
-    // Dark Blue Container
+    // 1. Silver Underbar Base (Ends at 1672)
+    canvas.drawRect(
+      ui.Rect.fromLTWH(0, underY * scaleY, 941 * scaleX, 217 * scaleY),
+      ui.Paint()
+        ..shader = ui.Gradient.linear(
+          ui.Offset(0, underY * scaleY),
+          ui.Offset(0, (underY + 217) * scaleY),
+          const [Color(0xFFE11335), Color(0xFFCCB3BE), Color(0xFFE3DFE1), Color(0xFFC9C9CE)],
+          const [0.0, 0.03, 0.22, 1.0],
+        ),
+    );
+
+    // 2. Dark Blue Ticker Container
     canvas.drawRRect(
       ui.RRect.fromRectAndRadius(
-        ui.Rect.fromLTWH(15 * scaleX, tickerY * scaleY, 1050 * scaleX, 88 * scaleY),
+        ui.Rect.fromLTWH(15 * scaleX, tickerY * scaleY, (941 - 30) * scaleX, 88 * scaleY),
         ui.Radius.circular(12 * scaleX),
       ),
       ui.Paint()..color = const Color(0xFF011C3D),
