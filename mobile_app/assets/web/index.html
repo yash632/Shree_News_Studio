@@ -35,14 +35,11 @@ html,body{
 body{display:block;position:relative}
 #canvas{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:top left;overflow:hidden;
  font-family:'Hind','Noto Sans Devanagari',sans-serif;font-weight:700;color:#111;
- background:radial-gradient(ellipse at 50% 45%,#1b2a6b 0%,#0c1440 45%,#2a0a14 100%)}
+ background:#0c1440 url('Glossy%20Red%20News%20Waves.png') no-repeat center center / cover}
 .abs{position:absolute}
 
 /* backdrop red glow */
-.glow{position:absolute;inset:0;background:
- linear-gradient(115deg,transparent 30%,rgba(200,10,25,.55) 45%,transparent 60%),
- radial-gradient(ellipse at 0 50%,#b30d1c 0,transparent 40%),
- radial-gradient(ellipse at 100% 20%,#b30d1c 0,transparent 35%);z-index:2}
+.glow{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 50%, rgba(255,20,30,0.15) 0%, transparent 70%);z-index:2}
 
 /* HEADER NAVBAR */
 #header{left:0;top:0;width:1920px;height:148px;background:linear-gradient(#ffffff,#f4f4f4);border-bottom:5px solid #c4121f;box-shadow:0 4px 14px rgba(0,0,0,.45);z-index:10}

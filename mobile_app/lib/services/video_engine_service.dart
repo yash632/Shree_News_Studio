@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_full_gpl/return_code.dart';
@@ -131,6 +133,29 @@ class VideoEngineService {
       }
     }
 
+    // Extract background image asset for framed video layout
+    int? bgInIdx;
+    if (config.frameScale < 250.0) {
+      try {
+        final bgAsset = isVertical
+            ? 'assets/web/waves.png'
+            : 'assets/web/Glossy Red News Waves.png';
+        final byteData = await rootBundle.load(bgAsset);
+        final tempDir = await getTemporaryDirectory();
+        final bgFile = File('${tempDir.path}/${isVertical ? "waves_bg.png" : "glossy_waves_bg.png"}');
+        await bgFile.writeAsBytes(
+          byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
+          flush: true,
+        );
+        if (await bgFile.exists()) {
+          bgInIdx = nextInputIdx++;
+          inputArgs.addAll(['-loop', '1', '-i', bgFile.path]);
+        }
+      } catch (e) {
+        debugPrint("Could not load background image asset: $e");
+      }
+    }
+
     // Input: Web UI Overlay PNG
     final overlayInIdx = nextInputIdx++;
     inputArgs.addAll(['-i', overlayPath]);
@@ -162,9 +187,9 @@ class VideoEngineService {
       baseVideo = "[0:v]";
     }
 
-    // Scaling & framing logic matching 6b456bd build_video_filter_graph
-    if (config.frameScale >= 180.0) {
-      // Wide / Full screen footage behind graphics
+    // Scaling & framing logic
+    if (config.frameScale >= 250.0) {
+      // Full screen footage behind graphics
       vFilters.add(
         "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
         "crop=$targetW:$targetH,setsar=1[vbase];"
@@ -182,11 +207,15 @@ class VideoEngineService {
         final vidX = (layout.x * scaleX).round();
         final vidY = (layout.y * scaleY).round();
 
-        vFilters.add("color=c=#0c1440:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        if (bgInIdx != null) {
+          vFilters.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
+        } else {
+          vFilters.add("color=c=#0c1440:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        }
         vFilters.add(
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
-        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY[vbase]");
+        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
         vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
       } else {
         // 9:16 Portrait Framed
@@ -210,11 +239,15 @@ class VideoEngineService {
         final vidX = (x * scaleX).round();
         final vidY = (y * scaleY).round();
 
-        vFilters.add("color=c=#800101:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        if (bgInIdx != null) {
+          vFilters.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
+        } else {
+          vFilters.add("color=c=#800101:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+        }
         vFilters.add(
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
-        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY[vbase]");
+        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
         vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0[vout]");
       }
     }

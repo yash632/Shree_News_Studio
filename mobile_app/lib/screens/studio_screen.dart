@@ -928,6 +928,48 @@ class _StudioScreenState extends State<StudioScreen> {
               ),
             ),
           ),
+
+          const SizedBox(height: 16),
+
+          // Video Footage Screen Size Slider (70% - 250%) directly below monitor
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text("📺 Video Footage Screen Size",
+                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  "${_config.frameScale.toInt()}% ${_config.frameScale == 100 ? '(Default)' : (_config.frameScale >= 250 ? '(Full Screen)' : (_config.frameScale >= 180 ? '(Wide)' : '(Compact)'))}",
+                  style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: _config.frameScale,
+            min: 70,
+            max: 250,
+            divisions: 36,
+            activeColor: Colors.redAccent,
+            onChanged: (val) {
+              setState(() => _config.frameScale = val);
+              _syncConfigToWeb();
+            },
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: const [
+              Text("70% (Compact)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("100% (Default)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("180% (Wide)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text("250% (Full Screen)", style: TextStyle(color: Colors.white38, fontSize: 10)),
+            ],
+          ),
         ],
       ),
     );
@@ -1632,48 +1674,6 @@ class _StudioScreenState extends State<StudioScreen> {
                 ],
               ],
             ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Video Footage Screen Size Slider (70% - 250%)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text("📺 Video Footage Screen Size",
-                  style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  "${_config.frameScale.toInt()}% ${_config.frameScale == 100 ? '(Default)' : (_config.frameScale >= 250 ? '(Full Screen)' : (_config.frameScale >= 180 ? '(Wide)' : '(Compact)'))}",
-                  style: const TextStyle(color: Colors.amber, fontWeight: FontWeight.bold, fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-          Slider(
-            value: _config.frameScale,
-            min: 70,
-            max: 250,
-            divisions: 36,
-            activeColor: Colors.redAccent,
-            onChanged: (val) {
-              setState(() => _config.frameScale = val);
-              _syncConfigToWeb();
-            },
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text("70% (Compact)", style: TextStyle(color: Colors.white38, fontSize: 10)),
-              Text("100% (Default)", style: TextStyle(color: Colors.white38, fontSize: 10)),
-              Text("180% (Wide)", style: TextStyle(color: Colors.white38, fontSize: 10)),
-              Text("250% (Full Screen)", style: TextStyle(color: Colors.white38, fontSize: 10)),
-            ],
           ),
 
           const SizedBox(height: 14),
