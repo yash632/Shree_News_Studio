@@ -38,7 +38,7 @@ class VideoEngineService {
   /// Renders broadcast video locally on the mobile phone using hardware FFmpeg.
   static Future<String> renderVideo({
     required String videoPath,
-    required String audioPath,
+    String? audioPath,
     required String overlayPath,
     required BroadcastConfig config,
     String? outroAudioPath,
@@ -47,8 +47,9 @@ class VideoEngineService {
     onProgress(0.05, "Analyzing media streams...");
 
     final videoDur = await getDuration(videoPath);
-    final audioDur = await getDuration(audioPath);
-    final outroDur = outroAudioPath != null ? await getDuration(outroAudioPath) : 0.0;
+    final hasMainAudio = audioPath != null && audioPath.isNotEmpty && File(audioPath).existsSync();
+    final audioDur = hasMainAudio ? await getDuration(audioPath!) : 0.0;
+    final outroDur = (outroAudioPath != null && File(outroAudioPath).existsSync()) ? await getDuration(outroAudioPath) : 0.0;
     final videoHasAudio = await hasAudio(videoPath);
 
     final isVertical = config.aspectRatio == "9:16";
@@ -59,12 +60,16 @@ class VideoEngineService {
     double targetDuration;
     double groundDur = config.groundClipDuration;
 
-    if (config.audioMixMode == "intro_then_ground_outro") {
-      targetDuration = audioDur + groundDur + outroDur;
-    } else if (config.audioMixMode == "intro_then_ground") {
-      targetDuration = audioDur + groundDur;
+    if (hasMainAudio) {
+      if (config.audioMixMode == "intro_then_ground_outro") {
+        targetDuration = audioDur + groundDur + outroDur;
+      } else if (config.audioMixMode == "intro_then_ground") {
+        targetDuration = audioDur + groundDur;
+      } else {
+        targetDuration = audioDur > 0 ? audioDur : (videoDur > 0 ? videoDur : 15.0);
+      }
     } else {
-      targetDuration = audioDur > 0 ? audioDur : (videoDur > 0 ? videoDur : 15.0);
+      targetDuration = videoDur > 0 ? videoDur : 15.0;
     }
 
     onProgress(0.15, "Configuring hardware-accelerated video pipeline...");
@@ -82,14 +87,17 @@ class VideoEngineService {
     }
     inputArgs.addAll(['-i', videoPath]);
 
-    // Input 1: Main Speech Audio
-    inputArgs.addAll(['-i', audioPath]);
+    int nextInputIdx = 1;
+    int? mainAudioInIdx;
+    if (hasMainAudio) {
+      mainAudioInIdx = nextInputIdx++;
+      inputArgs.addAll(['-i', audioPath!]);
+    }
 
-    int nextInputIdx = 2;
-
-    // Input 2 (Optional): Outro Speech Audio
+    // Optional Outro Speech Audio
     int? outroInIdx;
-    if (config.audioMixMode == "intro_then_ground_outro" &&
+    if (hasMainAudio &&
+        config.audioMixMode == "intro_then_ground_outro" &&
         outroAudioPath != null &&
         await File(outroAudioPath).exists()) {
       outroInIdx = nextInputIdx++;
@@ -100,13 +108,13 @@ class VideoEngineService {
     int outroVidInIdx = 0;
 
     // Dedicated inputs for restart footage
-    if (config.audioMixMode == "intro_then_ground" && config.restartFootage) {
+    if (hasMainAudio && config.audioMixMode == "intro_then_ground" && config.restartFootage) {
       groundVidInIdx = nextInputIdx++;
       if (videoDur > 0 && videoDur < targetDuration) {
         inputArgs.addAll(['-stream_loop', '-1']);
       }
       inputArgs.addAll(['-i', videoPath]);
-    } else if (config.audioMixMode == "intro_then_ground_outro") {
+    } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
       if (config.restartFootage) {
         groundVidInIdx = nextInputIdx++;
         if (videoDur > 0 && videoDur < targetDuration) {
@@ -131,7 +139,7 @@ class VideoEngineService {
     final vFilters = <String>[];
     String baseVideo;
 
-    if (config.audioMixMode == "intro_then_ground_outro") {
+    if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
       if (config.restartFootage && config.restartOutroFootage) {
         vFilters.add(
           "[0:v]trim=0:${audioDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v1_cut];"
@@ -143,7 +151,7 @@ class VideoEngineService {
       } else {
         baseVideo = "[0:v]";
       }
-    } else if (config.audioMixMode == "intro_then_ground" && config.restartFootage) {
+    } else if (hasMainAudio && config.audioMixMode == "intro_then_ground" && config.restartFootage) {
       vFilters.add(
         "[0:v]trim=0:${audioDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v1_cut];"
         "[$groundVidInIdx:v]trim=0:${groundDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v2_cut];"
@@ -215,26 +223,33 @@ class VideoEngineService {
     final aFilters = <String>[];
     final introVol = config.muteDuringAnchor ? 0.0 : config.footageVolume;
 
-    if (!videoHasAudio || config.audioMixMode == "voiceover_only") {
+    if (!hasMainAudio) {
+      // No voiceover script: play footage sound directly (or silence if video has no audio)
+      if (videoHasAudio) {
+        aFilters.add("[0:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
+      } else {
+        aFilters.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)}[aout]");
+      }
+    } else if (!videoHasAudio || config.audioMixMode == "voiceover_only") {
       // Voiceover only or silent footage
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
-          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[aout]",
         );
       } else if (config.audioMixMode == "intro_then_ground") {
         aFilters.add(
-          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[aout]",
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[aout]",
         );
       } else {
-        aFilters.add("[1:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
+        aFilters.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[aout]");
       }
     } else {
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
           "[0:a]volume='if(between(t,${audioDur.toStringAsFixed(2)},${(audioDur + groundDur).toStringAsFixed(2)}),1.0,${introVol.toStringAsFixed(2)})':eval=frame[footage_stream];"
-          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
           "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
@@ -242,14 +257,14 @@ class VideoEngineService {
       } else if (config.audioMixMode == "intro_then_ground") {
         aFilters.add(
           "[0:a]volume='if(lt(t,${audioDur.toStringAsFixed(2)}),${introVol.toStringAsFixed(2)},1.0)':eval=frame[a_seq];"
-          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[a_pad];"
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[a_pad];"
           "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0[aout]",
         );
       } else {
         // Mode 1: voiceover_ambient
         aFilters.add(
           "[0:a]volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
-          "[1:a]volume=1.0[vca];"
+          "[$mainAudioInIdx:a]volume=1.0[vca];"
           "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]",
         );
       }

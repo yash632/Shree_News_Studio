@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:webview_flutter_android/webview_flutter_android.dart';
 import 'package:file_picker/file_picker.dart';
@@ -26,6 +27,15 @@ class _StudioScreenState extends State<StudioScreen> {
   bool _isWebViewReady = false;
 
   final BroadcastConfig _config = BroadcastConfig();
+
+  // Monitor preview dimensions for pixel-perfect scaling without scrolling
+  double? _currentPreviewWidth;
+  double? _currentPreviewHeight;
+
+  // Voiceover Preview Player
+  VideoPlayerController? _voicePreviewPlayer;
+  bool _isLoadingVoicePreview = false;
+  bool _isPlayingVoicePreview = false;
 
   // Form Controllers
   final TextEditingController _headlineController = TextEditingController();
@@ -180,6 +190,7 @@ class _StudioScreenState extends State<StudioScreen> {
     _outroController.dispose();
     _apiKeyController.dispose();
     _finalVideoPlayerController?.dispose();
+    _voicePreviewPlayer?.dispose();
     super.dispose();
   }
 
@@ -229,6 +240,7 @@ class _StudioScreenState extends State<StudioScreen> {
   void _syncConfigToWeb() {
     if (!_isWebViewReady) return;
 
+    final isVertical = _config.aspectRatio == "9:16";
     final sidebarList = _sidebarControllers.map((c) => c.text).toList();
     _config.sidebarItems = sidebarList;
     _config.headlineText = _headlineController.text;
@@ -254,11 +266,84 @@ class _StudioScreenState extends State<StudioScreen> {
       'frameScale': _config.frameScale,
       'videoSrc': LocalVideoServer.videoUrl,
       'logoSrc': _selectedLogoBase64,
+      'previewWidth': _currentPreviewWidth ?? (isVertical ? (420.0 * 9 / 16) : (220.0 * 16 / 9)),
+      'previewHeight': _currentPreviewHeight ?? (isVertical ? 420.0 : 220.0),
     };
 
     final jsCall = 'if (window.setPreviewData) { window.setPreviewData(${jsonEncode(data)}); }';
     _webViewController.runJavaScript(jsCall);
     _saveSettings();
+  }
+
+  Future<void> _toggleVoicePreview() async {
+    if (_isPlayingVoicePreview) {
+      await _voicePreviewPlayer?.pause();
+      if (mounted) {
+        setState(() {
+          _isPlayingVoicePreview = false;
+        });
+      }
+      return;
+    }
+
+    final script = _scriptController.text.trim();
+    if (script.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('कृपया पहले न्यूज़ स्क्रिप्ट लिखें या Write Script पर क्लिक करें!'),
+          backgroundColor: Colors.amber,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingVoicePreview = true;
+    });
+
+    try {
+      final audioPath = await TtsService.generateSpeech(
+        text: script,
+        voice: _selectedVoice,
+        speed: _ttsSpeed,
+      );
+
+      _voicePreviewPlayer?.dispose();
+      _voicePreviewPlayer = VideoPlayerController.file(File(audioPath));
+      await _voicePreviewPlayer!.initialize();
+      _voicePreviewPlayer!.addListener(() {
+        if (_voicePreviewPlayer != null && mounted) {
+          final pos = _voicePreviewPlayer!.value.position;
+          final dur = _voicePreviewPlayer!.value.duration;
+          if (pos >= dur && dur > Duration.zero && _isPlayingVoicePreview) {
+            setState(() {
+              _isPlayingVoicePreview = false;
+            });
+          }
+        }
+      });
+
+      await _voicePreviewPlayer!.play();
+      if (mounted) {
+        setState(() {
+          _isLoadingVoicePreview = false;
+          _isPlayingVoicePreview = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingVoicePreview = false;
+          _isPlayingVoicePreview = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Voice Preview Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _pickVideo() async {
@@ -398,6 +483,22 @@ class _StudioScreenState extends State<StudioScreen> {
       final destPath = '${targetDir.path}/$fileName';
       await File(_finalVideoPath!).copy(destPath);
 
+      // Trigger Android MediaScanner to immediately index video in phone Gallery & Movies
+      if (Platform.isAndroid) {
+        try {
+          const channel = MethodChannel('com.shreenews.studio/media_scanner');
+          await channel.invokeMethod('scanFile', {'path': destPath});
+
+          final moviesDir = Directory('/storage/emulated/0/Movies/ShreeNews');
+          if (!moviesDir.existsSync()) {
+            moviesDir.createSync(recursive: true);
+          }
+          final moviesDest = '${moviesDir.path}/$fileName';
+          await File(_finalVideoPath!).copy(moviesDest);
+          await channel.invokeMethod('scanFile', {'path': moviesDest});
+        } catch (_) {}
+      }
+
       if (mounted) {
         showDialog(
           context: context,
@@ -408,11 +509,11 @@ class _StudioScreenState extends State<StudioScreen> {
               children: [
                 Icon(Icons.check_circle, color: Colors.greenAccent),
                 SizedBox(width: 8),
-                Text('Video Saved!', style: TextStyle(color: Colors.white, fontSize: 16)),
+                Text('Video Saved to Gallery!', style: TextStyle(color: Colors.white, fontSize: 16)),
               ],
             ),
             content: Text(
-              'वीडियो आपके फोन के Downloads/ShreeNews फोल्डर में सुरक्षित सेव हो गई है:\n\n$destPath',
+              'वीडियो आपके फोन के Gallery और Downloads/ShreeNews फोल्डर में सुरक्षित सेव हो गई है:\n\n$destPath',
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
             actions: [
@@ -462,14 +563,43 @@ class _StudioScreenState extends State<StudioScreen> {
       return;
     }
 
+    bool proceedWithoutVoice = false;
     if (_audioMode == "tts" && _scriptController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('कृपया न्यूज़ एंकर स्क्रिप्ट लिखें!'),
-          backgroundColor: Colors.redAccent,
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: Colors.amber, size: 24),
+              SizedBox(width: 8),
+              Text('No Voiceover Script', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ],
+          ),
+          content: const Text(
+            'You have not added any news voiceover script. Would you like to proceed and generate the broadcast video without voiceover (footage audio only)?',
+            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white60)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFDC2626),
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Proceed Without Voice', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ],
         ),
       );
-      return;
+
+      if (proceed != true) return;
+      proceedWithoutVoice = true;
     }
 
     setState(() {
@@ -480,35 +610,37 @@ class _StudioScreenState extends State<StudioScreen> {
     });
 
     try {
-      String mainAudioPath;
+      String? mainAudioPath;
       String? outroAudioPath;
 
       if (_audioMode == "tts") {
-        setState(() {
-          _progressValue = 0.15;
-          _progressStatus = "Synthesizing AI anchor voiceover...";
-        });
-
-        mainAudioPath = await TtsService.generateSpeech(
-          text: _scriptController.text.trim(),
-          voice: _selectedVoice,
-          speed: _ttsSpeed,
-        );
-
-        if (_config.audioMixMode == "intro_then_ground_outro" &&
-            _outroController.text.trim().isNotEmpty) {
+        if (!proceedWithoutVoice && _scriptController.text.trim().isNotEmpty) {
           setState(() {
-            _progressValue = 0.25;
-            _progressStatus = "Synthesizing anchor outro conclusion...";
+            _progressValue = 0.15;
+            _progressStatus = "Synthesizing AI anchor voiceover...";
           });
-          outroAudioPath = await TtsService.generateSpeech(
-            text: _outroController.text.trim(),
+
+          mainAudioPath = await TtsService.generateSpeech(
+            text: _scriptController.text.trim(),
             voice: _selectedVoice,
             speed: _ttsSpeed,
           );
+
+          if (_config.audioMixMode == "intro_then_ground_outro" &&
+              _outroController.text.trim().isNotEmpty) {
+            setState(() {
+              _progressValue = 0.25;
+              _progressStatus = "Synthesizing anchor outro conclusion...";
+            });
+            outroAudioPath = await TtsService.generateSpeech(
+              text: _outroController.text.trim(),
+              voice: _selectedVoice,
+              speed: _ttsSpeed,
+            );
+          }
         }
       } else {
-        mainAudioPath = _selectedAudioPath!;
+        mainAudioPath = _selectedAudioPath;
       }
 
       setState(() {
@@ -724,7 +856,19 @@ class _StudioScreenState extends State<StudioScreen> {
                 ),
                 child: AspectRatio(
                   aspectRatio: monitorRatio,
-                  child: WebViewWidget(controller: _webViewController),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (_currentPreviewWidth != constraints.maxWidth ||
+                          _currentPreviewHeight != constraints.maxHeight) {
+                        _currentPreviewWidth = constraints.maxWidth;
+                        _currentPreviewHeight = constraints.maxHeight;
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _syncConfigToWeb();
+                        });
+                      }
+                      return WebViewWidget(controller: _webViewController);
+                    },
+                  ),
                 ),
               ),
             ),
@@ -1135,6 +1279,42 @@ class _StudioScreenState extends State<StudioScreen> {
               divisions: 12,
               activeColor: Colors.redAccent,
               onChanged: (val) => setState(() => _ttsSpeed = val),
+            ),
+
+            const SizedBox(height: 10),
+
+            // Voiceover Preview Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isLoadingVoicePreview ? null : _toggleVoicePreview,
+                icon: _isLoadingVoicePreview
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : Icon(
+                        _isPlayingVoicePreview ? Icons.stop_circle_rounded : Icons.play_circle_fill_rounded,
+                        size: 18,
+                      ),
+                label: Text(
+                  _isLoadingVoicePreview
+                      ? "Generating Voiceover Preview..."
+                      : _isPlayingVoicePreview
+                          ? "Stop Voice Preview"
+                          : "Listen Voiceover Preview",
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isPlayingVoicePreview
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF4F46E5),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
             ),
           ] else ...[
             // Direct Audio Upload

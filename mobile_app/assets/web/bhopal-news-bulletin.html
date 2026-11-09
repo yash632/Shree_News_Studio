@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>श्री NEWS 24×7 – Breaking News</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind:wght@500;600;700&family=Poppins:wght@700;800&family=Roboto+Condensed:wght@700&display=swap" rel="stylesheet">
 <style>
@@ -14,8 +14,14 @@ html,body{
   padding:0;
   background:transparent;
   overflow:hidden !important;
+  touch-action:none;
+  -webkit-overflow-scrolling:none;
+  position:fixed;
+  inset:0;
   scrollbar-width:none !important;
   -ms-overflow-style:none !important;
+  user-select:none;
+  -webkit-user-select:none;
 }
 ::-webkit-scrollbar,*::-webkit-scrollbar{
   display:none !important;
@@ -203,6 +209,9 @@ body{
 </div>
 
 <script>
+window._previewWidth = null;
+window._previewHeight = null;
+
 // 1) Har text ka font-size apne-aap adjust hota hai taaki width reference image se match kare
 function fitText(){
   document.querySelectorAll('.t').forEach(function(e){
@@ -211,12 +220,12 @@ function fitText(){
     e.style.fontSize=fs+'px';
   });
 }
-// 2) Poster ko screen me fit karta hai
+// 2) Poster ko screen me fit karta hai (Exact fit inside monitor box)
 function fitScreen(){
   var w=document.getElementById('wrap');
   if(!w) return;
-  var vw = window.innerWidth || document.documentElement.clientWidth || 360;
-  var vh = window.innerHeight || document.documentElement.clientHeight || 640;
+  var vw = window._previewWidth || document.documentElement.clientWidth || window.innerWidth || 360;
+  var vh = window._previewHeight || document.documentElement.clientHeight || window.innerHeight || 640;
   var s = Math.min(vw/941, vh/1672);
   var leftOffset = Math.max(0, (vw - 941 * s) / 2);
   var topOffset = Math.max(0, (vh - 1672 * s) / 2);
@@ -259,6 +268,8 @@ function splitHeadline(text){
 }
 function setPreviewData(data){
   if(!data) return;
+  if(data.previewWidth) window._previewWidth = data.previewWidth;
+  if(data.previewHeight) window._previewHeight = data.previewHeight;
   var parts=splitHeadline(data.headline||'भोपाल में आज तेज बारिश, कई इलाकों में जलभराव');
   var h1=document.getElementById('headline1'), h2=document.getElementById('headline2');
   if(h1) h1.textContent=parts[0]||'';
@@ -390,6 +401,9 @@ window.addEventListener('message',function(event){
 window.addEventListener('resize',fitScreen);
 window.addEventListener('load',init);
 if(document.fonts&&document.fonts.ready){document.fonts.ready.then(init);}
+document.addEventListener('touchmove',function(e){e.preventDefault();},{passive:false});
+document.addEventListener('wheel',function(e){e.preventDefault();},{passive:false});
+window.addEventListener('scroll',function(){window.scrollTo(0,0);});
 init();
 </script>
 </body>

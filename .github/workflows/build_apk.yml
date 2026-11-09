@@ -29,7 +29,7 @@ jobs:
       - name: Scaffold Clean Official Flutter Project
         run: |
           # 1. Create pristine official app scaffold with Flutter 3.24.5
-          flutter create -t app --org com.shreenews --project-name shree_news_studio clean_app
+          flutter create -t app --org com.shreenews --project-name studio clean_app
           
           # 2. Transfer our code, assets, custom manifest and launcher icons
           rm -rf clean_app/lib/*
@@ -39,6 +39,11 @@ jobs:
 
           # Copy custom AndroidManifest.xml (contains android:label="Shree News")
           cp mobile_app/android/app/src/main/AndroidManifest.xml clean_app/android/app/src/main/AndroidManifest.xml
+
+          # Copy custom MainActivity.kt with native MediaScanner connection
+          rm -rf clean_app/android/app/src/main/kotlin/*
+          mkdir -p clean_app/android/app/src/main/kotlin
+          cp -r mobile_app/android/app/src/main/kotlin/* clean_app/android/app/src/main/kotlin/
 
           # Remove default flutter adaptive icons so Android strictly uses our custom ic_launcher PNGs
           rm -rf clean_app/android/app/src/main/res/mipmap-anydpi-v26

@@ -2,7 +2,7 @@
 <html lang="hi">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>SHRI NEWS 24×7 – Broadcast Template</title>
 <link href="https://fonts.googleapis.com/css2?family=Hind:wght@500;600;700;800&family=Noto+Sans+Devanagari:wght@600;700;800;900&display=swap" rel="stylesheet">
 <style>
@@ -18,7 +18,20 @@
 }
 
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;height:100%;background:#0c1440;overflow:hidden;margin:0;padding:0}
+html,body{
+  width:100%;
+  height:100%;
+  background:#0c1440;
+  overflow:hidden !important;
+  margin:0;
+  padding:0;
+  touch-action:none;
+  -webkit-overflow-scrolling:none;
+  position:fixed;
+  inset:0;
+  user-select:none;
+  -webkit-user-select:none;
+}
 body{display:block;position:relative}
 #canvas{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:top left;overflow:hidden;
  font-family:'Hind','Noto Sans Devanagari',sans-serif;font-weight:700;color:#111;
@@ -268,9 +281,12 @@ function fitAll(){
 }
 fitAll(); addEventListener('load',fitAll);
 
+window._previewWidth = null;
+window._previewHeight = null;
+
 function fit(){
-  const vw = window.innerWidth || document.documentElement.clientWidth || 360;
-  const vh = window.innerHeight || document.documentElement.clientHeight || 202;
+  const vw = window._previewWidth || document.documentElement.clientWidth || window.innerWidth || 360;
+  const vh = window._previewHeight || document.documentElement.clientHeight || window.innerHeight || 202;
   const s = Math.min(vw / 1920, vh / 1080);
   const c = $('canvas');
   if (c) {
@@ -282,10 +298,15 @@ function fit(){
 }
 window.addEventListener('resize', fit);
 window.addEventListener('load', fit);
+document.addEventListener('touchmove', function(e){ e.preventDefault(); }, { passive: false });
+document.addEventListener('wheel', function(e){ e.preventDefault(); }, { passive: false });
+window.addEventListener('scroll', function(){ window.scrollTo(0, 0); });
 fit();
 
 window.setPreviewData = function(data) {
   if (!data) return;
+  if (data.previewWidth) window._previewWidth = data.previewWidth;
+  if (data.previewHeight) window._previewHeight = data.previewHeight;
 
   // 1. Text Elements
   if (data.headline !== undefined) {
