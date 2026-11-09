@@ -9,6 +9,8 @@ jobs:
   build:
     name: Build Android APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Repository
@@ -51,31 +53,16 @@ jobs:
           # Copy custom launcher icons (golden sword "श्री" icon in all mipmap densities)
           cp -r mobile_app/android/app/src/main/res/* clean_app/android/app/src/main/res/
 
-          # 3. Configure Android SDK 35 & MinSDK 24
+          # 3. Transfer our production Gradle configs, signing keystore, and mirrors
+          rm -f clean_app/android/build.gradle.kts clean_app/android/app/build.gradle.kts
+          cp mobile_app/android/build.gradle clean_app/android/build.gradle
+          cp mobile_app/android/app/build.gradle clean_app/android/app/build.gradle
+          cp mobile_app/android/app/release.jks clean_app/android/app/release.jks
+
+          # 4. Configure Android SDK 34 (Android 14 standard) & MinSDK 24 in local.properties
           echo "flutter.minSdkVersion=24" >> clean_app/android/local.properties
-          echo "flutter.compileSdkVersion=35" >> clean_app/android/local.properties
-          echo "flutter.targetSdkVersion=35" >> clean_app/android/local.properties
-
-          if [ -f clean_app/android/app/build.gradle ]; then
-            sed -i 's/minSdkVersion flutter.minSdkVersion/minSdkVersion 24/g' clean_app/android/app/build.gradle || true
-            sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/g' clean_app/android/app/build.gradle || true
-            sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdkVersion 35/g' clean_app/android/app/build.gradle || true
-            sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/g' clean_app/android/app/build.gradle || true
-            sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdkVersion 35/g' clean_app/android/app/build.gradle || true
-            sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/g' clean_app/android/app/build.gradle || true
-          fi
-
-          # 4. Add Appodeal & Jitpack Maven mirrors for ffmpeg-kit-full-gpl binary resolution
-          cat << 'EOF' >> clean_app/android/build.gradle
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-                  maven { url "https://artifactory.appodeal.com/appodeal-public/" }
-                  maven { url "https://jitpack.io" }
-              }
-          }
-          EOF
+          echo "flutter.compileSdkVersion=34" >> clean_app/android/local.properties
+          echo "flutter.targetSdkVersion=34" >> clean_app/android/local.properties
 
       - name: Build Android Release APK
         run: |
@@ -90,3 +77,15 @@ jobs:
           path: clean_app/build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: v1.0.0
+          name: "Shree News Studio Release"
+          body: "Latest signed production APK. Tap app-release.apk below to download directly without extracting."
+          files: clean_app/build/app/outputs/flutter-apk/app-release.apk
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
