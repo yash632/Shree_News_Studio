@@ -466,6 +466,69 @@ class _StudioScreenState extends State<StudioScreen> {
     }
   }
 
+  void _showApiKeyDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        title: const Row(
+          children: [
+            Icon(Icons.vpn_key_rounded, color: Colors.amber, size: 20),
+            SizedBox(width: 8),
+            Text('Custom AI API Key', style: TextStyle(color: Colors.white, fontSize: 15)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Default built-in Groq key is active. To use your personal Groq/Mistral key, paste it below:',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _apiKeyController,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'gsk_... (Groq) or Mistral key',
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 11),
+                filled: true,
+                fillColor: const Color(0xFF0F172A),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              _apiKeyController.clear();
+              _saveSettings();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Reverted to default built-in Groq key')),
+              );
+            },
+            child: const Text('Reset Default', style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            onPressed: () {
+              _saveSettings();
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Custom API key saved!')),
+              );
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _saveVideoToDownloads() async {
     if (_finalVideoPath == null || !File(_finalVideoPath!).existsSync()) return;
     try {
@@ -483,19 +546,11 @@ class _StudioScreenState extends State<StudioScreen> {
       final destPath = '${targetDir.path}/$fileName';
       await File(_finalVideoPath!).copy(destPath);
 
-      // Trigger Android MediaScanner to immediately index video in phone Gallery & Movies
+      // Trigger Android MediaScanner to immediately index video in phone Gallery (single location save)
       if (Platform.isAndroid) {
         try {
           const channel = MethodChannel('com.shreenews.studio/media_scanner');
           await channel.invokeMethod('scanFile', {'path': destPath});
-
-          final moviesDir = Directory('/storage/emulated/0/Movies/ShreeNews');
-          if (!moviesDir.existsSync()) {
-            moviesDir.createSync(recursive: true);
-          }
-          final moviesDest = '${moviesDir.path}/$fileName';
-          await File(_finalVideoPath!).copy(moviesDest);
-          await channel.invokeMethod('scanFile', {'path': moviesDest});
         } catch (_) {}
       }
 
@@ -1118,47 +1173,54 @@ class _StudioScreenState extends State<StudioScreen> {
                         "AI Script & Elements Writer",
                         style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: const Color(0xFF334155)),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedAiModel,
-                            dropdownColor: const Color(0xFF0F172A),
-                            isDense: true,
-                            style: const TextStyle(color: Colors.white, fontSize: 11),
-                            items: const [
-                              DropdownMenuItem(
-                                value: "qwen/qwen3.8-27b",
-                                child: Text("Groq (Qwen 3.8 - Recommended)"),
-                              ),
-                              DropdownMenuItem(
-                                value: "openai/gpt-oss-120b",
-                                child: Text("Groq (GPT-OSS 120B)"),
-                              ),
-                              DropdownMenuItem(
-                                value: "llama-3.3-70b-versatile",
-                                child: Text("Groq (Llama 3.3 70B)"),
-                              ),
-                              DropdownMenuItem(
-                                value: "mistral-small-latest",
-                                child: Text("Mistral (Small)"),
-                              ),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() {
-                                  _selectedAiModel = val;
-                                  _selectedAiProvider = val.contains("mistral") ? "mistral" : "groq";
-                                });
-                              }
-                            },
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.vpn_key_rounded, size: 16, color: Colors.amber),
+                            tooltip: "Custom API Key Settings",
+                            padding: const EdgeInsets.only(right: 6),
+                            constraints: const BoxConstraints(),
+                            onPressed: _showApiKeyDialog,
                           ),
-                        ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: const Color(0xFF334155)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedAiModel,
+                                dropdownColor: const Color(0xFF0F172A),
+                                isDense: true,
+                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: "qwen/qwen3.8-27b",
+                                    child: Text("Groq (Qwen 3.8 - Recommended)"),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "openai/gpt-oss-120b",
+                                    child: Text("Groq (GPT-OSS 120B)"),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "openai/gpt-oss-20b",
+                                    child: Text("Groq (GPT-OSS 20B)"),
+                                  ),
+                                ],
+                                onChanged: (val) {
+                                  if (val != null) {
+                                    setState(() {
+                                      _selectedAiModel = val;
+                                      _selectedAiProvider = "groq";
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

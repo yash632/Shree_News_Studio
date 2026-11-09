@@ -191,7 +191,7 @@ class VideoEngineService {
       } else {
         // 9:16 Portrait Framed
         final topBound = config.enableTopBar ? 340.0 : 20.0;
-        final bottomBound = config.enableTicker ? 1150.0 : 1320.0;
+        final bottomBound = config.enableTicker ? 1150.0 : 1372.0;
         final availH = bottomBound - topBound;
         final scale = config.frameScale / 100.0;
         const stdW = 898.0;

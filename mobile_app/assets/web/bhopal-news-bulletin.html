@@ -116,15 +116,15 @@ body{
 #track1,#track2{display:none}
 @keyframes tickerRollLoop{0%{transform:translateY(0)}100%{transform:translateY(-50%)}}
 .ticker-roller{display:block;animation:tickerRollLoop 14s linear infinite;will-change:transform}
-.poster.ticker-off .brk,.poster.ticker-off .pGold,.poster.ticker-off .pRed,.poster.ticker-off .chev{top:1320px}
+.poster.ticker-off .brk,.poster.ticker-off .pGold,.poster.ticker-off .pRed,.poster.ticker-off .chev{top:1372px}
 .poster.ticker-off .brk{height:206px}
 .poster.ticker-off .pGold,.poster.ticker-off .pRed,.poster.ticker-off .chev{height:206px}
-.poster.ticker-off #bn1{top:1389px!important}
-.poster.ticker-off #bn2{top:1462px!important}
-.poster.ticker-off #headline1{top:1380px!important}
-.poster.ticker-off #headline2{top:1458px!important}
-.poster.ticker-off .sub{top:1522px!important}
-.poster.ticker-off #subtitle{top:1563px!important}
+.poster.ticker-off #bn1{top:1441px!important}
+.poster.ticker-off #bn2{top:1514px!important}
+.poster.ticker-off #headline1{top:1432px!important}
+.poster.ticker-off #headline2{top:1510px!important}
+.poster.ticker-off .sub{top:1576px!important;height:96px!important;border-radius:0!important;}
+.poster.ticker-off #subtitle{top:1624px!important}
 .poster.ticker-off .silver,.poster.ticker-off .ticker,.poster.ticker-off #time,.poster.ticker-off #date,.poster.ticker-off #weekday,.poster.ticker-off #label,.poster.ticker-off #track1,.poster.ticker-off #track2{display:none!important}
 .poster.datetime-off #time,.poster.datetime-off #date,.poster.datetime-off #weekday{display:none!important}
 .poster.datetime-off #label{left:15px!important;top:1538px!important;width:200px!important;height:88px!important;font-size:34px!important;clip-path:polygon(0 0,100% 0,calc(100% - 14px) 100%,0 100%)!important;border-radius:12px 0 0 12px!important;background:linear-gradient(180deg,#e03030,#d30202 40%,#960101)!important;display:flex!important;align-items:center!important;justify-content:center!important;z-index:20!important;transform:none!important}
@@ -340,7 +340,7 @@ function setPreviewData(data){
       var w, h, x, y;
       var stdW = 898;
       var topBound = 340;
-      var bottomBound = data.tickerEnabled ? 1150 : 1320;
+      var bottomBound = data.tickerEnabled ? 1150 : 1372;
       var availH = bottomBound - topBound;
       var centerY = Math.round((topBound + bottomBound) / 2);
       var stdH = Math.min(717, Math.round(availH * 0.88));

@@ -243,7 +243,7 @@ class OverlayRendererService {
       // 9:16 VERTICAL REEL / SHORT BROADCAST MODE
       // -------------------------------------------------------------
       final topBound = config.enableTopBar ? 340.0 : 20.0;
-      final brkTop = config.enableTicker ? 1150.0 : 1320.0;
+      final brkTop = config.enableTicker ? 1150.0 : 1372.0;
       final availH = brkTop - topBound;
       final scaleVal = config.frameScale;
       final scale = scaleVal / 100.0;
@@ -837,7 +837,7 @@ class OverlayRendererService {
       // -----------------------------------------------------------------------
       final double totalW = 941.0 * scaleX;
       final double redBarH = 206 * scaleY;
-      final double whiteBarH = (brkTop >= 1300.0 ? 110.0 : 96.0) * scaleY;
+      final double whiteBarH = (brkTop >= 1300.0 ? (1672.0 - (brkTop + 206.0) + 4.0) : 96.0) * scaleY;
       final double chevW = 320 * scaleX;
 
       // 1. Red Headline Bar Base (Width: 941)
@@ -946,12 +946,18 @@ class OverlayRendererService {
       hlPainter.paint(canvas, ui.Offset(chevW + 16 * scaleX, bandY + 28 * scaleY));
 
       // 3. White Sub-Headline Bar (Full-width underneath red bar)
-      final whiteRect = ui.Rect.fromLTWH(8 * scaleX, bandY + redBarH - 2 * scaleY, totalW - 16 * scaleX, whiteBarH);
+      final isFlushBottom = brkTop >= 1300.0;
+      final whiteRect = ui.Rect.fromLTWH(
+        isFlushBottom ? 0 : 8 * scaleX,
+        bandY + redBarH - 2 * scaleY,
+        isFlushBottom ? totalW : totalW - 16 * scaleX,
+        whiteBarH,
+      );
       canvas.drawRRect(
         ui.RRect.fromRectAndCorners(
           whiteRect,
-          bottomLeft: ui.Radius.circular(24 * scaleX),
-          bottomRight: ui.Radius.circular(24 * scaleX),
+          bottomLeft: ui.Radius.circular(isFlushBottom ? 0 : 24 * scaleX),
+          bottomRight: ui.Radius.circular(isFlushBottom ? 0 : 24 * scaleX),
         ),
         ui.Paint()
           ..shader = ui.Gradient.linear(
