@@ -40,6 +40,7 @@ class VideoEngineService {
   /// Renders broadcast video locally on the mobile phone using hardware FFmpeg.
   static Future<String> renderVideo({
     required String videoPath,
+    List<String>? videoPaths,
     String? audioPath,
     required String overlayPath,
     required BroadcastConfig config,
@@ -48,7 +49,16 @@ class VideoEngineService {
   }) async {
     onProgress(0.05, "Analyzing media streams...");
 
-    final videoDur = await getDuration(videoPath);
+    final clips = (videoPaths != null && videoPaths.isNotEmpty)
+        ? videoPaths
+        : [videoPath];
+    final isMultiClip = clips.length > 1;
+
+    double totalClipsDur = 0.0;
+    for (final c in clips) {
+      totalClipsDur += await getDuration(c);
+    }
+    final videoDur = totalClipsDur > 0 ? totalClipsDur : await getDuration(videoPath);
     final hasMainAudio = audioPath != null && audioPath.isNotEmpty && File(audioPath).existsSync();
     final audioDur = hasMainAudio ? await getDuration(audioPath!) : 0.0;
     final outroDur = (outroAudioPath != null && File(outroAudioPath).existsSync()) ? await getDuration(outroAudioPath) : 0.0;
@@ -83,13 +93,22 @@ class VideoEngineService {
     // Prepare inputs
     final inputArgs = <String>[];
 
-    // Input 0: Background video
-    if (videoDur > 0 && videoDur < targetDuration) {
-      inputArgs.addAll(['-stream_loop', '-1']);
+    int nextInputIdx = 0;
+    if (!isMultiClip) {
+      // Single background video
+      if (videoDur > 0 && videoDur < targetDuration) {
+        inputArgs.addAll(['-stream_loop', '-1']);
+      }
+      inputArgs.addAll(['-i', videoPath]);
+      nextInputIdx = 1;
+    } else {
+      // Multiple background video clips
+      for (int k = 0; k < clips.length; k++) {
+        inputArgs.addAll(['-i', clips[k]]);
+      }
+      nextInputIdx = clips.length;
     }
-    inputArgs.addAll(['-i', videoPath]);
 
-    int nextInputIdx = 1;
     int? mainAudioInIdx;
     if (hasMainAudio) {
       mainAudioInIdx = nextInputIdx++;
@@ -109,27 +128,29 @@ class VideoEngineService {
     int groundVidInIdx = 0;
     int outroVidInIdx = 0;
 
-    // Dedicated inputs for restart footage
-    if (hasMainAudio && config.audioMixMode == "intro_then_ground" && config.restartFootage) {
-      groundVidInIdx = nextInputIdx++;
-      if (videoDur > 0 && videoDur < targetDuration) {
-        inputArgs.addAll(['-stream_loop', '-1']);
-      }
-      inputArgs.addAll(['-i', videoPath]);
-    } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
-      if (config.restartFootage) {
+    // Dedicated inputs for restart footage (single-clip mode)
+    if (!isMultiClip) {
+      if (hasMainAudio && config.audioMixMode == "intro_then_ground" && config.restartFootage) {
         groundVidInIdx = nextInputIdx++;
         if (videoDur > 0 && videoDur < targetDuration) {
           inputArgs.addAll(['-stream_loop', '-1']);
         }
         inputArgs.addAll(['-i', videoPath]);
-      }
-      if (config.restartOutroFootage) {
-        outroVidInIdx = nextInputIdx++;
-        if (videoDur > 0 && videoDur < targetDuration) {
-          inputArgs.addAll(['-stream_loop', '-1']);
+      } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
+        if (config.restartFootage) {
+          groundVidInIdx = nextInputIdx++;
+          if (videoDur > 0 && videoDur < targetDuration) {
+            inputArgs.addAll(['-stream_loop', '-1']);
+          }
+          inputArgs.addAll(['-i', videoPath]);
         }
-        inputArgs.addAll(['-i', videoPath]);
+        if (config.restartOutroFootage) {
+          outroVidInIdx = nextInputIdx++;
+          if (videoDur > 0 && videoDur < targetDuration) {
+            inputArgs.addAll(['-stream_loop', '-1']);
+          }
+          inputArgs.addAll(['-i', videoPath]);
+        }
       }
     }
 
@@ -164,7 +185,18 @@ class VideoEngineService {
     final vFilters = <String>[];
     String baseVideo;
 
-    if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
+    if (isMultiClip) {
+      for (int k = 0; k < clips.length; k++) {
+        vFilters.add("[$k:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[vraw_$k]");
+      }
+      final concatInputs = List.generate(clips.length, (k) => "[vraw_$k]").join();
+      if (totalClipsDur > 0 && totalClipsDur < targetDuration) {
+        vFilters.add("${concatInputs}concat=n=${clips.length}:v=1:a=0,loop=loop=-1:size=32767:start=0[v_seq]");
+      } else {
+        vFilters.add("${concatInputs}concat=n=${clips.length}:v=1:a=0[v_seq]");
+      }
+      baseVideo = "[v_seq]";
+    } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
       if (config.restartFootage && config.restartOutroFootage) {
         vFilters.add(
           "[0:v]trim=0:${audioDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v1_cut];"

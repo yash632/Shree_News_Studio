@@ -53,6 +53,8 @@ class _StudioScreenState extends State<StudioScreen> {
   // Media files
   String? _selectedVideoPath;
   String? _selectedVideoName;
+  final List<String> _selectedVideoPaths = [];
+  final List<String> _selectedVideoNames = [];
   String? _selectedLogoPath;
   String? _selectedLogoBase64;
   String? _selectedAudioPath;
@@ -349,22 +351,50 @@ class _StudioScreenState extends State<StudioScreen> {
   Future<void> _pickVideo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.video,
-      allowMultiple: false,
+      allowMultiple: true,
     );
 
-    if (result != null && result.files.single.path != null) {
-      final path = result.files.single.path!;
+    if (result != null && result.files.isNotEmpty) {
+      final validFiles = result.files.where((f) => f.path != null).toList();
+      if (validFiles.isNotEmpty) {
+        setState(() {
+          for (final f in validFiles) {
+            if (!_selectedVideoPaths.contains(f.path!)) {
+              _selectedVideoPaths.add(f.path!);
+              _selectedVideoNames.add(f.name);
+            }
+          }
+          _selectedVideoPath = _selectedVideoPaths.first;
+          _selectedVideoName = _selectedVideoNames.first;
+        });
+        LocalVideoServer.setVideoPath(_selectedVideoPath);
+        _syncConfigToWeb();
+      }
+    }
+  }
+
+  void _removeVideoAt(int index) {
+    if (index >= 0 && index < _selectedVideoPaths.length) {
       setState(() {
-        _selectedVideoPath = path;
-        _selectedVideoName = result.files.single.name;
+        _selectedVideoPaths.removeAt(index);
+        _selectedVideoNames.removeAt(index);
+        if (_selectedVideoPaths.isNotEmpty) {
+          _selectedVideoPath = _selectedVideoPaths.first;
+          _selectedVideoName = _selectedVideoNames.first;
+        } else {
+          _selectedVideoPath = null;
+          _selectedVideoName = null;
+        }
       });
-      LocalVideoServer.setVideoPath(path);
+      LocalVideoServer.setVideoPath(_selectedVideoPath);
       _syncConfigToWeb();
     }
   }
 
   void _clearVideo() {
     setState(() {
+      _selectedVideoPaths.clear();
+      _selectedVideoNames.clear();
       _selectedVideoPath = null;
       _selectedVideoName = null;
     });
@@ -716,6 +746,7 @@ class _StudioScreenState extends State<StudioScreen> {
 
       final outputPath = await VideoEngineService.renderVideo(
         videoPath: _selectedVideoPath!,
+        videoPaths: _selectedVideoPaths,
         audioPath: mainAudioPath,
         overlayPath: overlayPath,
         config: _config,
@@ -990,60 +1021,132 @@ class _StudioScreenState extends State<StudioScreen> {
           _buildStepHeader("1", "Video Footage & Channel Logo"),
           const SizedBox(height: 14),
 
-          // Background Video Footage Dropzone
-          const Text(
-            "Background Video Footage *",
-            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+          // Background Video Footage Section (Multi-Clip Support)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                "Background Video Footage *",
+                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              if (_selectedVideoPaths.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.blueAccent.withOpacity(0.5)),
+                  ),
+                  child: Text(
+                    "${_selectedVideoPaths.length} Clip${_selectedVideoPaths.length > 1 ? 's' : ''}",
+                    style: const TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 11),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 8),
-          InkWell(
-            onTap: _pickVideo,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _selectedVideoPath != null ? Colors.green : const Color(0xFF475569),
-                  style: BorderStyle.solid,
+
+          if (_selectedVideoPaths.isEmpty)
+            InkWell(
+              onTap: _pickVideo,
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF475569)),
                 ),
-              ),
-              child: _selectedVideoPath == null
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.video_library_outlined, color: Colors.blueAccent, size: 28),
-                        SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("Click to pick video footage",
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-                            Text("MP4, MOV, WEBM, MKV",
-                                style: TextStyle(color: Colors.white54, fontSize: 11)),
-                          ],
-                        ),
-                      ],
-                    )
-                  : Row(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.video_library_outlined, color: Colors.blueAccent, size: 28),
+                    SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(Icons.check_circle, color: Colors.green, size: 24),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _selectedVideoName ?? "video.mp4",
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.redAccent, size: 20),
-                          onPressed: _clearVideo,
-                        ),
+                        Text("Click to select video footage (1 or more)",
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text("MP4, MOV, WEBM, MKV (Multiple clips supported)",
+                            style: TextStyle(color: Colors.white54, fontSize: 11)),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Column(
+              children: List.generate(_selectedVideoPaths.length, (index) {
+                final name = _selectedVideoNames.length > index ? _selectedVideoNames[index] : "clip_${index + 1}.mp4";
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.withOpacity(0.6)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          "Clip ${index + 1}",
+                          style: const TextStyle(color: Colors.greenAccent, fontSize: 10, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => _removeVideoAt(index),
+                        child: const Padding(
+                          padding: EdgeInsets.all(4),
+                          child: Icon(Icons.close, color: Colors.redAccent, size: 18),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ),
-          ),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _pickVideo,
+                    icon: const Icon(Icons.add, size: 16, color: Colors.blueAccent),
+                    label: const Text("Add More Clips", style: TextStyle(color: Colors.blueAccent, fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.blueAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed: _clearVideo,
+                  icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+                  label: const Text("Clear All", style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.redAccent),
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  ),
+                ),
+              ],
+            ),
+          ],
 
           const SizedBox(height: 16),
 
