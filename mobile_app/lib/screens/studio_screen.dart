@@ -825,6 +825,7 @@ class _StudioScreenState extends State<StudioScreen> {
         targetWidth: targetW,
         targetHeight: targetH,
         customLogoPath: _selectedLogoPath,
+        renderTickerText: false,
       );
 
       final outputPath = await VideoEngineService.renderVideo(

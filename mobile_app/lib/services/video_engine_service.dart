@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
@@ -23,21 +24,28 @@ class VideoEngineService {
     return 0.0;
   }
 
-  /// Checks if file contains an audio stream.
+  /// Checks if media file contains at least one valid audio stream.
   static Future<bool> hasAudio(String filePath) async {
     try {
       final session = await FFprobeKit.getMediaInformation(filePath);
       final info = session.getMediaInformation();
-      if (info != null && info.getStreams().isNotEmpty) {
+      if (info != null && info.getStreams() != null) {
         for (final stream in info.getStreams()) {
-          if (stream.getType() == 'audio') return true;
+          if (stream.getType() == "audio") {
+            return true;
+          }
         }
       }
     } catch (_) {}
     return false;
   }
 
-  /// Renders broadcast video locally on the mobile phone using hardware FFmpeg.
+  /// Escapes path strings for FFmpeg filtergraph (FreeType fontfile/textfile).
+  static String _escapeFilterPath(String path) {
+    return path.replaceAll('\\', '/').replaceAll("'", "'\\\\''").replaceAll(':', '\\:');
+  }
+
+  /// Renders broadcast-grade news video with hardware acceleration on mobile.
   static Future<String> renderVideo({
     required String videoPath,
     List<String>? videoPaths,
@@ -56,15 +64,25 @@ class VideoEngineService {
         : [videoPath];
     final isMultiClip = clips.length > 1;
 
+    final clipDurs = <double>[];
+    final clipHasAudios = <bool>[];
     double totalClipsDur = 0.0;
+    bool hasAnyFootageAudio = false;
+
     for (final c in clips) {
-      totalClipsDur += await getDuration(c);
+      final dur = await getDuration(c);
+      final hasAud = await hasAudio(c);
+      clipDurs.add(dur > 0 ? dur : 1.0);
+      clipHasAudios.add(hasAud);
+      totalClipsDur += (dur > 0 ? dur : 1.0);
+      if (hasAud) hasAnyFootageAudio = true;
     }
+
     final videoDur = totalClipsDur > 0 ? totalClipsDur : await getDuration(videoPath);
     final hasMainAudio = audioPath != null && audioPath.isNotEmpty && File(audioPath).existsSync();
     final audioDur = hasMainAudio ? await getDuration(audioPath!) : 0.0;
     final outroDur = (outroAudioPath != null && File(outroAudioPath).existsSync()) ? await getDuration(outroAudioPath) : 0.0;
-    final videoHasAudio = await hasAudio(videoPath);
+    final videoHasAudio = isMultiClip ? hasAnyFootageAudio : await hasAudio(videoPath);
 
     final isVertical = config.aspectRatio == "9:16";
     final targetW = isVertical ? 720 : 1280;
@@ -206,23 +224,44 @@ class VideoEngineService {
       }
     }
 
-    // Input: Web UI Overlay PNG
+    // Input: Web UI Overlay PNG (Graphics Plate)
     final overlayInIdx = nextInputIdx++;
     inputArgs.addAll(['-i', overlayPath]);
 
     // Build video filter graph
     final vFilters = <String>[];
+    final aFilters = <String>[];
     String baseVideo;
 
+    // Calculate loops needed if total clips duration is less than target duration
+    int loopsNeeded = 1;
+    if (isMultiClip && totalClipsDur > 0 && totalClipsDur < targetDuration) {
+      loopsNeeded = (targetDuration / totalClipsDur).ceil().clamp(1, 10);
+    }
+
     if (isMultiClip) {
+      // 1. Scale each input clip to target resolution
       for (int k = 0; k < clips.length; k++) {
         vFilters.add("[$k:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[vraw_$k]");
       }
-      final concatInputs = List.generate(clips.length, (k) => "[vraw_$k]").join();
-      if (totalClipsDur > 0 && totalClipsDur < targetDuration) {
-        vFilters.add("${concatInputs}concat=n=${clips.length}:v=1:a=0,loop=loop=-1:size=32767:start=0[v_seq]");
-      } else {
+
+      if (loopsNeeded <= 1) {
+        final concatInputs = List.generate(clips.length, (k) => "[vraw_$k]").join();
         vFilters.add("${concatInputs}concat=n=${clips.length}:v=1:a=0[v_seq]");
+      } else {
+        // Zero-OOM split looping: split each scaled stream into loopsNeeded branches without RAM buffering
+        for (int k = 0; k < clips.length; k++) {
+          final splitLabels = List.generate(loopsNeeded, (l) => "[v_${k}_$l]").join();
+          vFilters.add("[vraw_$k]split=$loopsNeeded$splitLabels");
+        }
+        final seq = <String>[];
+        for (int l = 0; l < loopsNeeded; l++) {
+          for (int k = 0; k < clips.length; k++) {
+            seq.add("[v_${k}_$l]");
+          }
+        }
+        final totalSegs = clips.length * loopsNeeded;
+        vFilters.add("${seq.join()}concat=n=$totalSegs:v=1:a=0[v_seq]");
       }
       baseVideo = "[v_seq]";
     } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
@@ -248,16 +287,12 @@ class VideoEngineService {
       baseVideo = "[0:v]";
     }
 
-    final vNewsTag = hasStingers ? "[v_news_body]" : "[vout]";
-    final aNewsTag = hasStingers ? "[a_news_body]" : "[aout]";
-
-    // Scaling & framing logic
+    // Scaling & framing logic: composite video with background into [vbase]
     if (config.frameScale >= 250.0) {
       // Full screen footage behind graphics
       vFilters.add(
         "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
-        "crop=$targetW:$targetH,setsar=1[vbase];"
-        "[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag",
+        "crop=$targetW:$targetH,setsar=1[vbase]",
       );
     } else {
       // Framed inside broadcast window
@@ -280,7 +315,6 @@ class VideoEngineService {
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
         vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
-        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag");
       } else {
         // 9:16 Portrait Framed
         final topBound = config.enableTopBar ? 340.0 : 20.0;
@@ -312,22 +346,140 @@ class VideoEngineService {
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
         vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
-        vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$vNewsTag");
       }
     }
 
-    // Audio filter graph
-    final aFilters = <String>[];
+    final vNewsTag = hasStingers ? "[v_news_body]" : "[vout]";
+    final aNewsTag = hasStingers ? "[a_news_body]" : "[aout]";
+
+    // Setup Animated Scrolling Ticker via FreeType drawtext
+    File? tempTickerTextFile;
+    String? tickerFilterTag;
+    int tickerBoxW = 100;
+    int tickerBoxH = 20;
+    int tickerBoxX = 0;
+    int tickerBoxY = 0;
+
+    if (config.enableTicker) {
+      try {
+        final fontByteData = await rootBundle.load('assets/web/fonts/Hind-Bold.ttf');
+        final tempDir = await getTemporaryDirectory();
+        final fontFile = File('${tempDir.path}/Hind-Bold.ttf');
+        if (!fontFile.existsSync()) {
+          await fontFile.writeAsBytes(
+            fontByteData.buffer.asUint8List(fontByteData.offsetInBytes, fontByteData.lengthInBytes),
+            flush: true,
+          );
+        }
+
+        final rawTicker = config.tickerText.trim().isNotEmpty
+            ? config.tickerText.trim()
+            : "श्री NEWS Twenty Four by Seven | देश और दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
+        final paddedTicker = "$rawTicker              ";
+        tempTickerTextFile = File('${tempDir.path}/ticker_content.txt');
+        await tempTickerTextFile.writeAsString(paddedTicker, encoding: utf8);
+
+        final escapedFont = _escapeFilterPath(fontFile.path);
+        final escapedTxt = _escapeFilterPath(tempTickerTextFile.path);
+
+        int fontSize, speed;
+        if (!isVertical) {
+          // 16:9 Landscape (1280x720 canvas)
+          final scaleX = targetW / 1920.0;
+          final scaleY = targetH / 1080.0;
+          final tLeft = config.enableDateTime ? 695.0 * scaleX : 288.0 * scaleX;
+          final tWidth = targetW - tLeft;
+          final tY = 970.0 * scaleY;
+          final tH = 88.0 * scaleY;
+
+          tickerBoxW = math.max(100, ((tWidth.round() ~/ 2) * 2));
+          tickerBoxH = math.max(20, ((tH.round() ~/ 2) * 2));
+          tickerBoxX = tLeft.round();
+          tickerBoxY = tY.round();
+          fontSize = math.max(16, (32 * scaleY).round());
+          speed = math.max(60, (190 * scaleX).round());
+        } else {
+          // 9:16 Portrait (720x1280 canvas)
+          final scaleX = targetW / 941.0;
+          final scaleY = targetH / 1672.0;
+          final tLeft = (config.enableDateTime ? 436.0 : 215.0) * scaleX;
+          final tWidth = (941.0 - (config.enableDateTime ? 436.0 : 215.0) - 15.0) * scaleX;
+          final tY = 1538.0 * scaleY;
+          final tH = 88.0 * scaleY;
+
+          tickerBoxW = math.max(100, ((tWidth.round() ~/ 2) * 2));
+          tickerBoxH = math.max(20, ((tH.round() ~/ 2) * 2));
+          tickerBoxX = tLeft.round();
+          tickerBoxY = tY.round();
+          fontSize = math.max(16, (28 * scaleY).round());
+          speed = math.max(60, (190 * scaleX).round());
+        }
+
+        vFilters.add("color=s=${tickerBoxW}x${tickerBoxH}:c=black@0.0,format=rgba[tbox]");
+        vFilters.add(
+          "[tbox]drawtext=fontfile='$escapedFont':textfile='$escapedTxt':"
+          "fontcolor=white:fontsize=$fontSize:y=(h-text_h)/2:"
+          "x=w-mod(t*$speed\\,w+text_w)[ttext]"
+        );
+        tickerFilterTag = "[ttext]";
+      } catch (e) {
+        debugPrint("Ticker drawtext setup error: $e");
+      }
+    }
+
+    // Overlay Graphics Plate + Scrolling Ticker
+    final plateTag = (tickerFilterTag != null) ? "[v_news_plate]" : vNewsTag;
+    vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$plateTag");
+    if (tickerFilterTag != null) {
+      vFilters.add("[v_news_plate]$tickerFilterTag overlay=x=$tickerBoxX:y=$tickerBoxY$vNewsTag");
+    }
+
+    // Audio filter graph setup with multi-clip and zero-failure fallback
     final introVol = config.muteDuringAnchor ? 0.0 : config.footageVolume;
+
+    String? footageAudioTag;
+    if (isMultiClip) {
+      if (hasAnyFootageAudio) {
+        for (int k = 0; k < clips.length; k++) {
+          if (clipHasAudios[k]) {
+            aFilters.add("[$k:a]aformat=sample_rates=44100:channel_layouts=stereo[araw_$k]");
+          } else {
+            aFilters.add("aevalsrc=0:d=${clipDurs[k].toStringAsFixed(2)}:s=44100[araw_$k]");
+          }
+        }
+        if (loopsNeeded <= 1) {
+          final concatAudioInputs = List.generate(clips.length, (k) => "[araw_$k]").join();
+          aFilters.add("${concatAudioInputs}concat=n=${clips.length}:v=0:a=1[a_footage_stream]");
+        } else {
+          for (int k = 0; k < clips.length; k++) {
+            final splitLabels = List.generate(loopsNeeded, (l) => "[a_${k}_$l]").join();
+            aFilters.add("[araw_$k]asplit=$loopsNeeded$splitLabels");
+          }
+          final aseq = <String>[];
+          for (int l = 0; l < loopsNeeded; l++) {
+            for (int k = 0; k < clips.length; k++) {
+              aseq.add("[a_${k}_$l]");
+            }
+          }
+          final totalSegs = clips.length * loopsNeeded;
+          aFilters.add("${aseq.join()}concat=n=$totalSegs:v=0:a=1[a_footage_stream]");
+        }
+        footageAudioTag = "[a_footage_stream]";
+      }
+    } else {
+      if (videoHasAudio) {
+        footageAudioTag = "[0:a]";
+      }
+    }
 
     if (!hasMainAudio) {
       // No voiceover script: play footage sound directly (or silence if video has no audio)
-      if (videoHasAudio) {
-        aFilters.add("[0:a]aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
+      if (footageAudioTag != null) {
+        aFilters.add("$footageAudioTag aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
       } else {
         aFilters.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)}$aNewsTag");
       }
-    } else if (!videoHasAudio || config.audioMixMode == "voiceover_only") {
+    } else if (footageAudioTag == null || config.audioMixMode == "voiceover_only") {
       // Voiceover only or silent footage
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
@@ -343,9 +495,10 @@ class VideoEngineService {
         aFilters.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
       }
     } else {
+      // Both voiceover and footage audio available
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
         aFilters.add(
-          "[0:a]volume='if(between(t,${audioDur.toStringAsFixed(2)},${(audioDur + groundDur).toStringAsFixed(2)}),1.0,${introVol.toStringAsFixed(2)})':eval=frame[footage_stream];"
+          "$footageAudioTag volume='if(between(t,${audioDur.toStringAsFixed(2)},${(audioDur + groundDur).toStringAsFixed(2)}),1.0,${introVol.toStringAsFixed(2)})':eval=frame[footage_stream];"
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
@@ -353,14 +506,14 @@ class VideoEngineService {
         );
       } else if (config.audioMixMode == "intro_then_ground") {
         aFilters.add(
-          "[0:a]volume='if(lt(t,${audioDur.toStringAsFixed(2)}),${introVol.toStringAsFixed(2)},1.0)':eval=frame[a_seq];"
+          "$footageAudioTag volume='if(lt(t,${audioDur.toStringAsFixed(2)}),${introVol.toStringAsFixed(2)},1.0)':eval=frame[a_seq];"
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[a_pad];"
           "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0$aNewsTag",
         );
       } else {
         // Mode 1: voiceover_ambient
         aFilters.add(
-          "[0:a]volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
+          "$footageAudioTag volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
           "[$mainAudioInIdx:a]volume=1.0[vca];"
           "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0$aNewsTag",
         );
@@ -427,15 +580,23 @@ class VideoEngineService {
       }
     });
 
-    final session = await FFmpegKit.executeWithArguments(cmd);
-    final returnCode = await session.getReturnCode();
+    try {
+      final session = await FFmpegKit.executeWithArguments(cmd);
+      final returnCode = await session.getReturnCode();
 
-    if (ReturnCode.isSuccess(returnCode) && await File(outputPath).exists()) {
-      onProgress(1.0, "Broadcast video ready!");
-      return outputPath;
-    } else {
-      final logs = await session.getAllLogsAsString();
-      throw Exception("FFmpeg Rendering Failed:\n$logs");
+      if (ReturnCode.isSuccess(returnCode) && await File(outputPath).exists()) {
+        onProgress(1.0, "Broadcast video ready!");
+        return outputPath;
+      } else {
+        final logs = await session.getAllLogsAsString();
+        throw Exception("FFmpeg Rendering Failed:\n$logs");
+      }
+    } finally {
+      if (tempTickerTextFile != null && tempTickerTextFile.existsSync()) {
+        try {
+          tempTickerTextFile.deleteSync();
+        } catch (_) {}
+      }
     }
   }
 }

@@ -119,6 +119,7 @@ class OverlayRendererService {
     required int targetWidth,
     required int targetHeight,
     String? customLogoPath,
+    bool renderTickerText = true,
   }) async {
     final isVertical = config.aspectRatio == "9:16";
     final double baseWidth = isVertical ? 941.0 : 1920.0;
@@ -236,6 +237,7 @@ class OverlayRendererService {
           dayStr: dayStr,
           tickerTag: config.tickerTag,
           tickerText: config.tickerText,
+          renderTickerText: renderTickerText,
         );
       }
     } else {
@@ -312,6 +314,7 @@ class OverlayRendererService {
           dayStr: dayStr,
           tickerTag: config.tickerTag,
           tickerText: config.tickerText,
+          renderTickerText: renderTickerText,
         );
       }
     }
@@ -1149,6 +1152,7 @@ class OverlayRendererService {
     required String dayStr,
     required String tickerTag,
     required String tickerText,
+    bool renderTickerText = true,
   }) {
     const underY = 948.0;
     final double tagLeft = enableDateTime ? 445.0 * scaleX : 28.0 * scaleX;
@@ -1222,24 +1226,26 @@ class OverlayRendererService {
     );
 
     // Ticker Text Strip (Dark Blue)
-    final tText = tickerText.trim().isNotEmpty
-        ? tickerText.trim()
-        : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
     canvas.drawRect(
       ui.Rect.fromLTWH(tickerLeft, 970 * scaleY, tickerWidth, 88 * scaleY),
       ui.Paint()..color = const Color(0xFF0F1E4A),
     );
-    final tickerPainter = TextPainter(
-      text: TextSpan(
-        text: tText,
-        style: TextStyle(color: Colors.white, fontSize: 30 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      ellipsis: '...',
-    );
-    tickerPainter.layout(maxWidth: tickerWidth - 40 * scaleX);
-    tickerPainter.paint(canvas, ui.Offset(tickerLeft + 20 * scaleX, 992 * scaleY));
+    if (renderTickerText) {
+      final tText = tickerText.trim().isNotEmpty
+          ? tickerText.trim()
+          : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
+      final tickerPainter = TextPainter(
+        text: TextSpan(
+          text: tText,
+          style: TextStyle(color: Colors.white, fontSize: 30 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '...',
+      );
+      tickerPainter.layout(maxWidth: tickerWidth - 40 * scaleX);
+      tickerPainter.paint(canvas, ui.Offset(tickerLeft + 20 * scaleX, 992 * scaleY));
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -1255,6 +1261,7 @@ class OverlayRendererService {
     required String dayStr,
     required String tickerTag,
     required String tickerText,
+    bool renderTickerText = true,
   }) {
     const underY = 1455.0;
     const tickerY = 1538.0;
@@ -1329,20 +1336,22 @@ class OverlayRendererService {
     );
 
     // Ticker Text
-    final tText = tickerText.trim().isNotEmpty
-        ? tickerText.trim()
-        : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
-    final tickerPainter = TextPainter(
-      text: TextSpan(
-        text: tText,
-        style: TextStyle(color: Colors.white, fontSize: 26 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      ellipsis: '...',
-    );
-    tickerPainter.layout(maxWidth: tickerWidth - 30 * scaleX);
-    tickerPainter.paint(canvas, ui.Offset(tickerLeft + 16 * scaleX, (tickerY + 26) * scaleY));
+    if (renderTickerText) {
+      final tText = tickerText.trim().isNotEmpty
+          ? tickerText.trim()
+          : "श्री न्यूज़ 24x7 | देश-दुनिया की हर बड़ी खबर | सबसे पहले और सबसे सटीक";
+      final tickerPainter = TextPainter(
+        text: TextSpan(
+          text: tText,
+          style: TextStyle(color: Colors.white, fontSize: 26 * scaleY, fontWeight: FontWeight.w700, fontFamily: 'Hind'),
+        ),
+        textDirection: TextDirection.ltr,
+        maxLines: 1,
+        ellipsis: '...',
+      );
+      tickerPainter.layout(maxWidth: tickerWidth - 30 * scaleX);
+      tickerPainter.paint(canvas, ui.Offset(tickerLeft + 16 * scaleX, (tickerY + 26) * scaleY));
+    }
   }
 
   static void _paintText({
