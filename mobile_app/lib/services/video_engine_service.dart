@@ -228,9 +228,8 @@ class VideoEngineService {
     final overlayInIdx = nextInputIdx++;
     inputArgs.addAll(['-i', overlayPath]);
 
-    // Build video filter graph
-    final vFilters = <String>[];
-    final aFilters = <String>[];
+    // Build unified linear filter graph (avoids out-of-order stream reference bugs)
+    final filterChains = <String>[];
     String baseVideo;
 
     // Calculate loops needed if total clips duration is less than target duration
@@ -242,17 +241,17 @@ class VideoEngineService {
     if (isMultiClip) {
       // 1. Scale each input clip to target resolution
       for (int k = 0; k < clips.length; k++) {
-        vFilters.add("[$k:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[vraw_$k]");
+        filterChains.add("[$k:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[vraw_$k]");
       }
 
       if (loopsNeeded <= 1) {
         final concatInputs = List.generate(clips.length, (k) => "[vraw_$k]").join();
-        vFilters.add("${concatInputs}concat=n=${clips.length}:v=1:a=0[v_seq]");
+        filterChains.add("${concatInputs}concat=n=${clips.length}:v=1:a=0[v_seq]");
       } else {
         // Zero-OOM split looping: split each scaled stream into loopsNeeded branches without RAM buffering
         for (int k = 0; k < clips.length; k++) {
           final splitLabels = List.generate(loopsNeeded, (l) => "[v_${k}_$l]").join();
-          vFilters.add("[vraw_$k]split=$loopsNeeded$splitLabels");
+          filterChains.add("[vraw_$k]split=$loopsNeeded$splitLabels");
         }
         final seq = <String>[];
         for (int l = 0; l < loopsNeeded; l++) {
@@ -261,12 +260,12 @@ class VideoEngineService {
           }
         }
         final totalSegs = clips.length * loopsNeeded;
-        vFilters.add("${seq.join()}concat=n=$totalSegs:v=1:a=0[v_seq]");
+        filterChains.add("${seq.join()}concat=n=$totalSegs:v=1:a=0[v_seq]");
       }
       baseVideo = "[v_seq]";
     } else if (hasMainAudio && config.audioMixMode == "intro_then_ground_outro") {
       if (config.restartFootage && config.restartOutroFootage) {
-        vFilters.add(
+        filterChains.add(
           "[0:v]trim=0:${audioDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v1_cut];"
           "[$groundVidInIdx:v]trim=0:${groundDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v2_cut];"
           "[$outroVidInIdx:v]trim=0:${outroDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v3_cut];"
@@ -277,7 +276,7 @@ class VideoEngineService {
         baseVideo = "[0:v]";
       }
     } else if (hasMainAudio && config.audioMixMode == "intro_then_ground" && config.restartFootage) {
-      vFilters.add(
+      filterChains.add(
         "[0:v]trim=0:${audioDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v1_cut];"
         "[$groundVidInIdx:v]trim=0:${groundDur.toStringAsFixed(2)},setpts=PTS-STARTPTS[v2_cut];"
         "[v1_cut][v2_cut]concat=n=2:v=1:a=0[v_seq]",
@@ -288,77 +287,70 @@ class VideoEngineService {
     }
 
     // Scaling & framing logic: composite video with background into [vbase]
+    // Uses mathematical centering (W-w)/2 and (H-h)/2 so footage is 100% centered horizontally & vertically!
     if (config.frameScale >= 250.0) {
       // Full screen footage behind graphics
-      vFilters.add(
+      filterChains.add(
         "$baseVideo scale=$targetW:$targetH:force_original_aspect_ratio=increase,"
         "crop=$targetW:$targetH,setsar=1[vbase]",
       );
     } else {
       // Framed inside broadcast window
       if (!isVertical) {
-        final layout = OverlayRendererService.calculateFrameLayout(config);
+        // 16:9 Landscape Mode
         final scaleX = targetW / 1920.0;
         final scaleY = targetH / 1080.0;
+        final layout = OverlayRendererService.calculateFrameLayout(config);
+        final topBound = config.enableTopBar ? (148.0 * scaleY) : 0.0;
+        final bottomBound = (config.enableTicker ? 768.0 : 900.0) * scaleY;
+        final availH = math.max(100.0, bottomBound - topBound);
 
-        final vidW = math.max(2, (layout.w * scaleX).round() ~/ 2 * 2);
-        final vidH = math.max(2, (layout.h * scaleY).round() ~/ 2 * 2);
-        final vidX = (layout.x * scaleX).round();
-        final vidY = (layout.y * scaleY).round();
+        final bool isCustomLayout = config.enableSidebar || config.enableAnchor;
+        final int vidX = isCustomLayout ? (layout.x * scaleX).round() : 0;
+        final int vidW = isCustomLayout ? math.max(2, (layout.w * scaleX).round() ~/ 2 * 2) : targetW;
+        final int vidY = isCustomLayout ? (layout.y * scaleY).round() : topBound.round();
+        final int vidH = isCustomLayout ? math.max(2, (layout.h * scaleY).round() ~/ 2 * 2) : availH.round();
 
         if (bgInIdx != null) {
-          vFilters.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
+          filterChains.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
         } else {
-          vFilters.add("color=c=#0c1440:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+          filterChains.add("color=c=#0c1440:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
         }
-        vFilters.add(
+        filterChains.add(
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
-        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
+        filterChains.add("[vbg][vpip]overlay=x='($vidX + ($vidW - w)/2)':y='($vidY + ($vidH - h)/2)':shortest=1[vbase]");
       } else {
-        // 9:16 Portrait Framed
-        final topBound = config.enableTopBar ? 340.0 : 20.0;
-        final bottomBound = config.enableTicker ? 1150.0 : 1372.0;
-        final availH = bottomBound - topBound;
-        final scale = config.frameScale / 100.0;
-        const stdW = 898.0;
-        final stdH = math.min(717.0, availH * 0.88);
-
-        final w = (stdW * scale).round();
-        final h = (stdH * scale).round();
-        final x = ((941.0 - w) / 2.0).round();
-        final y = (((topBound + bottomBound) / 2.0) - (h / 2.0)).round();
-
+        // 9:16 Portrait Mode
         final scaleX = targetW / 941.0;
         final scaleY = targetH / 1672.0;
+        final topBound = config.enableTopBar ? (340.0 * scaleY) : (20.0 * scaleY);
+        final bottomBound = (config.enableTicker ? 1150.0 : 1372.0) * scaleY;
+        final availH = math.max(100.0, bottomBound - topBound);
 
-        final vidW = math.max(2, (w * scaleX).round() ~/ 2 * 2);
-        final vidH = math.max(2, (h * scaleY).round() ~/ 2 * 2);
-        final vidX = (x * scaleX).round();
-        final vidY = (y * scaleY).round();
+        final int vidX = 0;
+        final int vidW = targetW;
+        final int vidY = topBound.round();
+        final int vidH = availH.round();
 
         if (bgInIdx != null) {
-          vFilters.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
+          filterChains.add("[$bgInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1[vbg]");
         } else {
-          vFilters.add("color=c=#800101:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
+          filterChains.add("color=c=#800101:s=${targetW}x${targetH}:d=${targetDuration.toStringAsFixed(2)}[vbg]");
         }
-        vFilters.add(
+        filterChains.add(
           "$baseVideo scale=$vidW:$vidH:force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1[vpip]",
         );
-        vFilters.add("[vbg][vpip]overlay=x=$vidX:y=$vidY:shortest=1[vbase]");
+        filterChains.add("[vbg][vpip]overlay=x='($vidX + ($vidW - w)/2)':y='($vidY + ($vidH - h)/2)':shortest=1[vbase]");
       }
     }
 
-    final vNewsTag = hasStingers ? "[v_news_body]" : "[vout]";
-    final aNewsTag = hasStingers ? "[a_news_body]" : "[aout]";
+    // Overlay Graphics Plate onto video base
+    filterChains.add("[vbase][$overlayInIdx:v]overlay=0:0[v_news_plate]");
 
     // Setup Animated Scrolling Ticker via FreeType drawtext
     File? tempTickerTextFile;
-    String? tickerFilterTag;
-    int tickerBoxW = 100;
-    int tickerBoxH = 20;
-    int tickerBoxX = 0;
-    int tickerBoxY = 0;
+    bool hasTickerOverlay = false;
 
     if (config.enableTicker) {
       try {
@@ -382,7 +374,7 @@ class VideoEngineService {
         final escapedFont = _escapeFilterPath(fontFile.path);
         final escapedTxt = _escapeFilterPath(tempTickerTextFile.path);
 
-        int fontSize, speed;
+        int tickerBoxW, tickerBoxH, tickerBoxX, tickerBoxY, fontSize, speed;
         if (!isVertical) {
           // 16:9 Landscape (1280x720 canvas)
           final scaleX = targetW / 1920.0;
@@ -415,23 +407,21 @@ class VideoEngineService {
           speed = math.max(60, (190 * scaleX).round());
         }
 
-        vFilters.add("color=s=${tickerBoxW}x${tickerBoxH}:c=black@0.0,format=rgba[tbox]");
-        vFilters.add(
+        filterChains.add("color=s=${tickerBoxW}x${tickerBoxH}:c=black@0.0,format=rgba[tbox]");
+        filterChains.add(
           "[tbox]drawtext=fontfile='$escapedFont':textfile='$escapedTxt':"
           "fontcolor=white:fontsize=$fontSize:y=(h-text_h)/2:"
-          "x=w-mod(t*$speed\\,w+text_w)[ttext]"
+          "x='w-mod(t*$speed\\,w+text_w)'[ttext]"
         );
-        tickerFilterTag = "[ttext]";
+        filterChains.add("[v_news_plate][ttext]overlay=x=$tickerBoxX:y=$tickerBoxY,fps=30,setpts=PTS-STARTPTS,setsar=1[v_news_body]");
+        hasTickerOverlay = true;
       } catch (e) {
         debugPrint("Ticker drawtext setup error: $e");
       }
     }
 
-    // Overlay Graphics Plate + Scrolling Ticker
-    final plateTag = (tickerFilterTag != null) ? "[v_news_plate]" : vNewsTag;
-    vFilters.add("[vbase][$overlayInIdx:v]overlay=0:0$plateTag");
-    if (tickerFilterTag != null) {
-      vFilters.add("[v_news_plate]$tickerFilterTag overlay=x=$tickerBoxX:y=$tickerBoxY$vNewsTag");
+    if (!hasTickerOverlay) {
+      filterChains.add("[v_news_plate]fps=30,setpts=PTS-STARTPTS,setsar=1[v_news_body]");
     }
 
     // Audio filter graph setup with multi-clip and zero-failure fallback
@@ -442,18 +432,18 @@ class VideoEngineService {
       if (hasAnyFootageAudio) {
         for (int k = 0; k < clips.length; k++) {
           if (clipHasAudios[k]) {
-            aFilters.add("[$k:a]aformat=sample_rates=44100:channel_layouts=stereo[araw_$k]");
+            filterChains.add("[$k:a]aformat=sample_rates=44100:channel_layouts=stereo[araw_$k]");
           } else {
-            aFilters.add("aevalsrc=0:d=${clipDurs[k].toStringAsFixed(2)}:s=44100[araw_$k]");
+            filterChains.add("aevalsrc=0:d=${clipDurs[k].toStringAsFixed(2)}:s=44100[araw_$k]");
           }
         }
         if (loopsNeeded <= 1) {
           final concatAudioInputs = List.generate(clips.length, (k) => "[araw_$k]").join();
-          aFilters.add("${concatAudioInputs}concat=n=${clips.length}:v=0:a=1[a_footage_stream]");
+          filterChains.add("${concatAudioInputs}concat=n=${clips.length}:v=0:a=1[a_footage_stream]");
         } else {
           for (int k = 0; k < clips.length; k++) {
             final splitLabels = List.generate(loopsNeeded, (l) => "[a_${k}_$l]").join();
-            aFilters.add("[araw_$k]asplit=$loopsNeeded$splitLabels");
+            filterChains.add("[araw_$k]asplit=$loopsNeeded$splitLabels");
           }
           final aseq = <String>[];
           for (int l = 0; l < loopsNeeded; l++) {
@@ -462,7 +452,7 @@ class VideoEngineService {
             }
           }
           final totalSegs = clips.length * loopsNeeded;
-          aFilters.add("${aseq.join()}concat=n=$totalSegs:v=0:a=1[a_footage_stream]");
+          filterChains.add("${aseq.join()}concat=n=$totalSegs:v=0:a=1[a_footage_stream]");
         }
         footageAudioTag = "[a_footage_stream]";
       }
@@ -475,47 +465,47 @@ class VideoEngineService {
     if (!hasMainAudio) {
       // No voiceover script: play footage sound directly (or silence if video has no audio)
       if (footageAudioTag != null) {
-        aFilters.add("$footageAudioTag aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
+        filterChains.add("$footageAudioTag aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]");
       } else {
-        aFilters.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)}$aNewsTag");
+        filterChains.add("anullsrc=channel_layout=stereo:sample_rate=44100:d=${targetDuration.toStringAsFixed(2)},asetpts=PTS-STARTPTS[a_news_body]");
       }
     } else if (footageAudioTag == null || config.audioMixMode == "voiceover_only") {
       // Voiceover only or silent footage
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
-        aFilters.add(
+        filterChains.add(
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
-          "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1$aNewsTag",
+          "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1,aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]",
         );
       } else if (config.audioMixMode == "intro_then_ground") {
-        aFilters.add(
-          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}$aNewsTag",
+        filterChains.add(
+          "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)},asetpts=PTS-STARTPTS[a_news_body]",
         );
       } else {
-        aFilters.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo$aNewsTag");
+        filterChains.add("[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]");
       }
     } else {
       // Both voiceover and footage audio available
       if (config.audioMixMode == "intro_then_ground_outro" && outroInIdx != null) {
-        aFilters.add(
+        filterChains.add(
           "$footageAudioTag volume='if(between(t,${audioDur.toStringAsFixed(2)},${(audioDur + groundDur).toStringAsFixed(2)}),1.0,${introVol.toStringAsFixed(2)})':eval=frame[footage_stream];"
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${(audioDur + groundDur).toStringAsFixed(2)}[a_in_pad];"
           "[$outroInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_out_norm];"
           "[a_in_pad][a_out_norm]concat=n=2:v=0:a=1[voice_stream];"
-          "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0$aNewsTag",
+          "[voice_stream][footage_stream]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]",
         );
       } else if (config.audioMixMode == "intro_then_ground") {
-        aFilters.add(
+        filterChains.add(
           "$footageAudioTag volume='if(lt(t,${audioDur.toStringAsFixed(2)}),${introVol.toStringAsFixed(2)},1.0)':eval=frame[a_seq];"
           "[$mainAudioInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur=${targetDuration.toStringAsFixed(2)}[a_pad];"
-          "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0$aNewsTag",
+          "[a_pad][a_seq]amix=inputs=2:duration=longest:dropout_transition=0:normalize=0,aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]",
         );
       } else {
         // Mode 1: voiceover_ambient
-        aFilters.add(
+        filterChains.add(
           "$footageAudioTag volume=${config.footageVolume.toStringAsFixed(2)}[vga];"
           "[$mainAudioInIdx:a]volume=1.0[vca];"
-          "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0$aNewsTag",
+          "[vca][vga]amix=inputs=2:duration=first:dropout_transition=2:normalize=0,aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_news_body]",
         );
       }
     }
@@ -523,33 +513,36 @@ class VideoEngineService {
     // Connect TV Channel Stinger Videos (Intro & Outro Full Screen)
     if (hasStingers) {
       if (hasIntroStinger) {
-        vFilters.add("[$introStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[v_intro_stinger]");
+        filterChains.add("[$introStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,fps=30,setpts=PTS-STARTPTS,setsar=1[v_intro_stinger]");
         if (introHasAudio) {
-          aFilters.add("[$introStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_intro_stinger]");
+          filterChains.add("[$introStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_intro_stinger]");
         } else {
-          aFilters.add("aevalsrc=0:d=${introStingerDur.toStringAsFixed(2)}:s=44100[a_intro_stinger]");
+          filterChains.add("aevalsrc=0:d=${introStingerDur.toStringAsFixed(2)}:s=44100,asetpts=PTS-STARTPTS[a_intro_stinger]");
         }
       }
 
       if (hasOutroStinger) {
-        vFilters.add("[$outroStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,setsar=1,fps=30[v_outro_stinger]");
+        filterChains.add("[$outroStingerInIdx:v]scale=$targetW:$targetH:force_original_aspect_ratio=increase,crop=$targetW:$targetH,fps=30,setpts=PTS-STARTPTS,setsar=1[v_outro_stinger]");
         if (outroHasAudio) {
-          aFilters.add("[$outroStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo[a_outro_stinger]");
+          filterChains.add("[$outroStingerInIdx:a]aformat=sample_rates=44100:channel_layouts=stereo,asetpts=PTS-STARTPTS[a_outro_stinger]");
         } else {
-          aFilters.add("aevalsrc=0:d=${outroStingerDur.toStringAsFixed(2)}:s=44100[a_outro_stinger]");
+          filterChains.add("aevalsrc=0:d=${outroStingerDur.toStringAsFixed(2)}:s=44100,asetpts=PTS-STARTPTS[a_outro_stinger]");
         }
       }
 
       if (hasIntroStinger && hasOutroStinger) {
-        vFilters.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=3:v=1:a=1[vout][aout]");
+        filterChains.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=3:v=1:a=1[vout][aout]");
       } else if (hasIntroStinger) {
-        vFilters.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body]concat=n=2:v=1:a=1[vout][aout]");
+        filterChains.add("[v_intro_stinger][a_intro_stinger][v_news_body][a_news_body]concat=n=2:v=1:a=1[vout][aout]");
       } else if (hasOutroStinger) {
-        vFilters.add("[v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=2:v=1:a=1[vout][aout]");
+        filterChains.add("[v_news_body][a_news_body][v_outro_stinger][a_outro_stinger]concat=n=2:v=1:a=1[vout][aout]");
       }
+    } else {
+      filterChains.add("[v_news_body]null[vout]");
+      filterChains.add("[a_news_body]anull[aout]");
     }
 
-    final fullFilterComplex = "${vFilters.join(';')};${aFilters.join(';')}";
+    final fullFilterComplex = filterChains.join(';');
 
     final cmd = [
       "-y",
